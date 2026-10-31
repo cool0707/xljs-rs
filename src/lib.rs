@@ -4,6 +4,7 @@
 
 pub mod api;
 pub mod cli;
+pub mod db;
 pub mod engine;
 mod error;
 pub mod i18n;

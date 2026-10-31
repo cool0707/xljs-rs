@@ -9,7 +9,7 @@
     "font": "游ゴシック"
   },
   "messages": {
-    "cli.usage": "xljs - Excel/CSV スクリプトランナー\n\n使い方:\n  xljs [オプション] <script.js|script.ts> [引数...]\n  xljs pack <script> [-o 出力.exe]   スクリプトを埋め込んだ exe を作成\n  xljs check <script>                構文と import を検査（実行しない）\n  xljs init [フォルダ]               型定義 (xljs.d.ts) と jsconfig.json を作成\n  xljs vba <book.xlsm>... [-o 出力.txt]  マクロブックの VBA コードを 1 つのテキストにまとめる\n  xljs version                       バージョンを表示\n\nオプション:\n  --ui=auto|native|console|mock      UI の種類（既定: auto）\n  --ui-answers=<file.json>           mock UI の応答ファイル\n  --lang=auto|{0}                  メッセージの言語（既定: システムの言語）\n  --debug[=script|window]            デバッグ。script = デバッグウィンドウでスクリプトを実行\n                                     （WebView2 の開発者ツールでブレークポイント・ステップ実行）\n                                     window = 画面の開発者ツール（F12）だけを有効にする\n  --watchdog=<秒>|on|off             応答しないまま指定の秒数を過ぎたスクリプトを中止するか尋ねる\n                                     （無限ループ対策。既定: ネイティブ UI では 15 秒、それ以外は off）\n  --stop-key=<キー>|on|off           実行中にキーが押されたらスクリプトを中止するか尋ねる\n                                     （esc, f12, ctrl+shift+q など。Windows のみ。\n                                     既定: ネイティブ UI では esc、それ以外は off）\n\n環境変数 XLJS_UI / XLJS_UI_ANSWERS / XLJS_LANG / XLJS_DEBUG / XLJS_WATCHDOG / XLJS_STOP_KEY でも指定できます（埋め込み exe 向け）。\n",
+    "cli.usage": "xljs - Excel/CSV スクリプトランナー\n\n使い方:\n  xljs [オプション] <script.js|script.ts> [引数...]\n  xljs pack <script> [-o 出力.exe]   スクリプトを埋め込んだ exe を作成\n  xljs check <script>                構文と import を検査（実行しない）\n  xljs init [フォルダ]               型定義 (xljs.d.ts) と jsconfig.json を作成\n  xljs vba <book.xlsm>... [-o 出力.txt]  マクロブックの VBA コードを 1 つのテキストにまとめる\n  xljs repair <ファイル.db> [--force]  SQLite データベースを検査し、壊れていれば修復\n  xljs version                       バージョンを表示\n\nオプション:\n  --ui=auto|native|console|mock      UI の種類（既定: auto）\n  --ui-answers=<file.json>           mock UI の応答ファイル\n  --lang=auto|{0}                  メッセージの言語（既定: システムの言語）\n  --debug[=script|window]            デバッグ。script = デバッグウィンドウでスクリプトを実行\n                                     （WebView2 の開発者ツールでブレークポイント・ステップ実行）\n                                     window = 画面の開発者ツール（F12）だけを有効にする\n  --watchdog=<秒>|on|off             応答しないまま指定の秒数を過ぎたスクリプトを中止するか尋ねる\n                                     （無限ループ対策。既定: ネイティブ UI では 15 秒、それ以外は off）\n  --stop-key=<キー>|on|off           実行中にキーが押されたらスクリプトを中止するか尋ねる\n                                     （esc, f12, ctrl+shift+q など。Windows のみ。\n                                     既定: ネイティブ UI では esc、それ以外は off）\n\n環境変数 XLJS_UI / XLJS_UI_ANSWERS / XLJS_LANG / XLJS_DEBUG / XLJS_WATCHDOG / XLJS_STOP_KEY でも指定できます（埋め込み exe 向け）。\n",
     "cli.usageCheck": "使い方: xljs check <script>",
     "cli.usagePack": "使い方: xljs pack <script> [-o 出力.exe]",
     "cli.interrupted": "中断しました",
@@ -292,7 +292,39 @@
     "chart.kind.histogram": "ヒストグラム（Excel 2016 以降の形式）",
     "chart.kind.pareto": "パレート図",
     "chart.kind.boxWhisker": "箱ひげ図",
-    "chart.kind.map": "マップ"
+    "chart.kind.map": "マップ",
+    "sqlite.busy": "データベース {0} は他の人が使用中です。しばらくしてからやり直してください{1}",
+    "sqlite.lastWriter": "（最後に書き込みを始めた人: {0}（{1}）{2}）",
+    "sqlite.corrupt": "データベースのファイルが壊れています（{0}）",
+    "sqlite.closed": "データベースは閉じられています",
+    "sqlite.invalidHandle": "開いているデータベースではありません",
+    "sqlite.noTransaction": "トランザクションが開始されていません",
+    "sqlite.paramCount": "SQL のパラメータは {0} 個ですが、値が {1} 個渡されました",
+    "sqlite.paramMissing": "パラメータ {0} の値が渡されていません",
+    "sqlite.paramPositional": "SQL に名前のないパラメータ（?）があります。値は配列で渡してください",
+    "sqlite.badValue": "{0} はデータベースに保存できません",
+    "sqlite.bigint": "{0} はデータベースに保存するには大きすぎます（64 ビット整数まで）",
+    "sqlite.badOnCorrupt": "onCorrupt には \"ask\"、\"repair\"、\"error\" のいずれかを指定してください（\"{0}\" が指定されました）",
+    "sqlite.asyncTransaction": "transaction() に渡す関数は async にできません（Promise を返さないでください）",
+    "sqlite.repairInTransaction": "トランザクションの途中ではデータベースを修復できません",
+    "sqlite.repairFailed": "{0} を修復できませんでした: {1}",
+    "sqlite.missing": "データベースのファイルがありません",
+    "sqlite.salvageDamaged": "{0}: ファイルの壊れた部分にあった行は読み取れず、失われました",
+    "sqlite.salvageFailed": "{0}: {1} 行は制約に違反するため保存できませんでした",
+    "sqlite.askRepair": "データベースが壊れています。\n{0}\n\n{1}\n\nいま修復しますか？ 壊れたファイルは残しておきます。バックアップから作り直した場合、その後の変更のうち再現できなかったものは失われることがあります。",
+    "sqlite.notDamaged": "{0} は壊れていません。",
+    "sqlite.repaired.journal": "{0} を修復しました。中断された書き込みを取り消しました。データは失われていません。",
+    "sqlite.repaired.reindex": "{0} を修復しました。索引（インデックス）を作り直しました。データは失われていません。",
+    "sqlite.repaired.vacuum": "{0} を修復しました。ファイルを作り直しました。データは失われていません。",
+    "sqlite.repaired.backup": "{0} を {1} のバックアップから作り直し、その後の変更 {2} 件を反映しました（反映できなかった変更: {3} 件）。",
+    "sqlite.repaired.salvage": "{0} を、まだ読み取れる行から作り直しました。壊れた部分にあった行は失われています。",
+    "sqlite.repaired.none": "{0} を作り直しました。",
+    "sqlite.brokenKept": "壊れたファイルは {0} として残してあります。",
+    "sqlite.readme": "このフォルダは、ファイルサーバー上で複数の人が xljs から使うデータベース {0} のためのものです。\n\nlock         いまデータベースを読み書きしている人の目印\nowner.json   最後に書き込みを始めた人\nbackups/     自動バックアップ（snap-*.db）と、それぞれのあとの変更の記録（log-*.jsonl）\nbroken/      修復のときに退避した壊れたファイル\n\nデータベースを使っている間は、このフォルダを消したり名前を変えたりしないでください。\nデータベースが壊れたときは、データベースのファイルを xljs.exe にドロップすると修復できます（コマンドなら xljs repair {0}）。\n",
+    "cli.usageRepair": "使い方: xljs repair <ファイル.db> [--force]",
+    "cli.dbOk": "{0} は壊れていません。{1}",
+    "cli.dbBackups": "バックアップ: {0} 個（最新 {1}）。",
+    "cli.dbAskRepair": "{0} は壊れています。\n\n{1}\n\nいま修復しますか？ 壊れたファイルは残しておきます。"
   },
   "translations": [
     [
@@ -574,6 +606,74 @@
     [
       "exceeds maximum font length",
       "フォント名が長すぎます"
+    ],
+    [
+      "database disk image is malformed",
+      "ファイルの内容が不正です"
+    ],
+    [
+      "file is not a database",
+      "SQLite のデータベースではありません"
+    ],
+    [
+      "^database is locked$",
+      "データベースは他のプログラムが使用中です"
+    ],
+    [
+      "attempt to write a readonly database",
+      "読み取り専用のデータベースには書き込めません"
+    ],
+    [
+      "unable to open database file",
+      "データベースのファイルを開けません"
+    ],
+    [
+      "^no such table: (.+)$",
+      "テーブル $1 がありません"
+    ],
+    [
+      "^no such column: (.+)$",
+      "列 $1 がありません"
+    ],
+    [
+      "^table (\\S+) already exists$",
+      "テーブル $1 はすでにあります"
+    ],
+    [
+      "^table (\\S+) has (\\d+) columns but (\\d+) values were supplied$",
+      "テーブル $1 の列は $2 個ですが、値が $3 個指定されました"
+    ],
+    [
+      "^table (\\S+) has no column named (.+)$",
+      "テーブル $1 に列 $2 はありません"
+    ],
+    [
+      "^near \"(.*)\": syntax error$",
+      "SQL の構文が正しくありません（\"$1\" の付近）"
+    ],
+    [
+      "^incomplete input$",
+      "SQL が途中で終わっています"
+    ],
+    [
+      "^UNIQUE constraint failed: (.+)$",
+      "同じ値がすでにあります（一意制約: $1）"
+    ],
+    [
+      "^NOT NULL constraint failed: (.+)$",
+      "値が必要です（NOT NULL 制約: $1）"
+    ],
+    [
+      "^CHECK constraint failed: (.+)$",
+      "値が条件を満たしていません（CHECK 制約: $1）"
+    ],
+    [
+      "^FOREIGN KEY constraint failed$",
+      "関連するデータとの整合性が取れません（外部キー制約）"
+    ],
+    [
+      "^(\\d+) values for (\\d+) columns$",
+      "列は $2 個ですが、値が $1 個指定されました"
     ]
   ]
 }

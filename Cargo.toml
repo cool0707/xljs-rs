@@ -39,6 +39,7 @@ walkdir = "2"
 chrono = "0.4"
 ctrlc = "3"
 rpassword = "7"
+rusqlite = { version = "0.41", features = ["bundled", "backup", "column_decltype"] }
 
 [target.'cfg(windows)'.dependencies]
 windows = { version = "0.62", features = [

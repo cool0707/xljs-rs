@@ -92,6 +92,17 @@ csv.write(dest, rows);                          // BOM 付き UTF-8（{ encoding
 const data = fs.readJSON(h); fs.writeJSON(dest, data);
 ```
 
+## SQLite
+
+```js
+const db = sqlite.open("受注.db");   // ファイルサーバー上なら自動で共有モード（壊れにくく、壊れたら修復を提案）
+db.exec("CREATE TABLE IF NOT EXISTS 受注 (番号 TEXT PRIMARY KEY, 日付 DATE, 金額 INTEGER)");
+db.run("INSERT INTO 受注 VALUES (?, ?, ?)", "A1", new Date(2026, 3, 1), 1000);
+const rows = db.all("SELECT * FROM 受注 WHERE 金額 > ?", 500);  // オブジェクトの配列（DATE 列は Date）
+db.insert("受注", rowsFromExcel, { replace: true });            // まとめて挿入
+db.transaction(() => { /* 例外なら取り消し。async 不可 */ });
+```
+
 ## 進捗（フォームなしのとき。キャンセルでスクリプトが終わる）
 
 ```js

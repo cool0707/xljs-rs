@@ -3,6 +3,7 @@
 
 mod console;
 mod launch;
+mod db;
 mod vba;
 
 use std::path::Path;
@@ -157,6 +158,7 @@ fn run(con: &ConsoleState, args: Vec<String>) -> i32 {
             "check" => return cmd_check(con, &rest[1..]),
             "init" => return cmd_init(con, &rest[1..]),
             "vba" => return vba::cmd_vba(con, &rest[1..]),
+            "repair" => return db::cmd_repair(con, &rest[1..]),
             _ => {}
         }
     }
@@ -199,6 +201,9 @@ fn install_interrupt() {
 fn start(con: &ConsoleState, u: Arc<dyn Ui>, rest: Vec<String>, explicit_lang: bool, debug: &str, stop: &Stop) -> i32 {
     if vba::is_workbook(&rest[0]) {
         return vba::drop_vba(con, u, &rest);
+    }
+    if db::is_database(&rest[0]) {
+        return db::drop_database(con, u, &rest);
     }
     let m = match read_meta(&rest[0]) {
         Ok(m) => m,
