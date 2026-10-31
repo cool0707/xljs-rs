@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <title>はじめてのアプリ</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main>
+    <h1>こんにちは</h1>
+    <p>このページは <code>ui/index.html</code> です。<br>
+       <code>xljs pack app.js</code> で exe にすると、ui フォルダも一緒に埋め込まれます。</p>
+    <!-- フォームの値をスクリプトの greet() に渡し、戻り値を state.greeting に入れる -->
+    <form data-action="greet" data-result="greeting">
+      <input name="name" placeholder="お名前" required>
+      <button>挨拶</button>
+    </form>
+    <p class="greeting" data-bind="greeting"></p>
+    <p class="note">起動: <span data-bind="started"></span></p>
+  </main>
+</body>
+</html>

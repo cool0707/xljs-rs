@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>table</title>
+<link rel="stylesheet" href="base.css">
+<link rel="stylesheet" href="table.css">
+</head>
+<body>
+<header class="toolbar">
+  <input type="search" id="filter" spellcheck="false">
+  <span id="count"></span>
+  <span class="spacer"></span>
+  <button type="button" id="copy" class="small"></button>
+  <button type="button" id="save-csv" class="small"></button>
+  <button type="button" id="save-xlsx" class="small"></button>
+</header>
+<div id="grid" tabindex="0">
+  <div id="head" class="trow"></div>
+  <div id="body"><div id="rows"></div></div>
+  <div id="empty" hidden></div>
+</div>
+<footer>
+  <span id="status" class="status"></span>
+  <button type="button" id="ok" class="primary" hidden></button>
+  <button type="button" id="cancel"></button>
+</footer>
+<script src="bridge.js"></script>
+<script src="table.js"></script>
+</body>
+</html>

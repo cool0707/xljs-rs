@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <title>売上集計</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main>
+    <h1>売上集計</h1>
+
+    <!-- data-action="関数名" のボタンはスクリプトの export した関数を呼ぶ -->
+    <section class="drop" id="drop">
+      <button data-action="pickFolder">フォルダを選択…</button>
+      <span class="hint">またはフォルダか Excel ファイルをここにドロップ</span>
+      <div class="folder" data-bind="folder"></div>
+    </section>
+
+    <!-- data-bind="キー" の要素には win.state の値が表示される -->
+    <p class="message" data-bind="message"></p>
+    <progress data-bind="progress" max="100" data-show="running"></progress>
+
+    <div class="buttons">
+      <button data-action="aggregate" data-show="count">集計</button>
+      <button data-action="cancel" data-show="running" class="secondary">中止</button>
+      <button data-action="showRows" data-show="done" class="secondary">明細を表示</button>
+      <button id="save" data-show="done" class="secondary">保存…</button>
+    </div>
+
+    <table id="result" hidden>
+      <thead><tr><th>顧客名</th><th>件数</th><th>合計</th></tr></thead>
+      <tbody></tbody>
+    </table>
+    <ul id="warnings"></ul>
+  </main>
+
+  <script>
+    // スクリプトから win.invoke("render", summary) で呼ばれる
+    xljs.handle("render", (summary) => {
+      const tbody = document.querySelector("#result tbody");
+      tbody.replaceChildren(...summary.map((r) => {
+        const tr = document.createElement("tr");
+        for (const v of [r.顧客名, r.件数.toLocaleString(), r.合計.toLocaleString()]) {
+          const td = document.createElement("td");
+          td.textContent = v;
+          tr.append(td);
+        }
+        return tr;
+      }));
+      document.getElementById("result").hidden = summary.length === 0;
+    });
+
+    // スクリプトの win.emit("warnings", errors)
+    xljs.on("warnings", (errors) => {
+      document.getElementById("warnings").replaceChildren(...errors.map((e) => {
+        const li = document.createElement("li");
+        li.textContent = e;
+        return li;
+      }));
+    });
+
+    // 戻り値を使う場合は xljs.invoke を直接呼ぶ（エラーは Promise の reject になる）
+    document.getElementById("save").addEventListener("click", async () => {
+      const name = await xljs.invoke("save");
+      if (name) xljs.state.message = `${name} に保存しました`;
+    });
+
+    // ドロップしたファイル・フォルダはスクリプトでハンドル（実パス付き）になる
+    const drop = document.getElementById("drop");
+    drop.addEventListener("dragover", (e) => { e.preventDefault(); drop.classList.add("over"); });
+    drop.addEventListener("dragleave", () => drop.classList.remove("over"));
+    drop.addEventListener("drop", (e) => {
+      e.preventDefault();
+      drop.classList.remove("over");
+      xljs.invoke("dropped", e.dataTransfer.files);
+    });
+  </script>
+</body>
+</html>

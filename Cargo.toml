@@ -1,0 +1,66 @@
+[package]
+name = "xljs"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.91"
+description = "Windows single-binary runner for JavaScript/TypeScript scripts that process Excel, CSV and JSON"
+license = "Apache-2.0"
+publish = false
+build = "build.rs"
+
+[lib]
+path = "src/lib.rs"
+
+[[bin]]
+name = "xljs"
+path = "src/main.rs"
+
+[dependencies]
+rquickjs = { version = "0.14", features = ["classes", "properties"] }
+oxc = { version = "0.156", features = ["transformer", "codegen", "semantic", "ast_visit"] }
+oxc_sourcemap = "9"
+umya-spreadsheet = "3.1"
+cfb = "0.14"
+zip = { version = "8", default-features = false, features = ["deflate"] }
+quick-xml = "0.41"
+encoding_rs = "0.8"
+regex = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["preserve_order"] }
+base64 = "0.22"
+globset = "0.4"
+unicode-width = "0.2"
+walkdir = "2"
+chrono = "0.4"
+ctrlc = "3"
+
+[target.'cfg(windows)'.dependencies]
+windows = { version = "0.62", features = [
+  "Win32_Foundation",
+  "Win32_Globalization",
+  "Win32_Graphics_Gdi",
+  "Win32_Storage_FileSystem",
+  "Win32_System_Com",
+  "Win32_System_Console",
+  "Win32_System_LibraryLoader",
+  "Win32_System_Ole",
+  "Win32_System_Threading",
+  "Win32_System_WinRT",
+  "Win32_UI_Controls",
+  "Win32_UI_Input_KeyboardAndMouse",
+  "Win32_UI_HiDpi",
+  "Win32_UI_Shell",
+  "Win32_UI_Shell_Common",
+  "Win32_UI_WindowsAndMessaging",
+] }
+windows-core = "0.62"
+webview2-com = "0.39"
+
+[build-dependencies]
+
+[profile.release]
+opt-level = "s"
+lto = true
+codegen-units = 1
+strip = true
+panic = "unwind"

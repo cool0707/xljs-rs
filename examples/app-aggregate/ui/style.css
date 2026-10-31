@@ -1,0 +1,60 @@
+:root {
+  color-scheme: light dark;
+  --bg: #f5f6f8;
+  --panel: #fff;
+  --text: #222;
+  --muted: #666;
+  --line: #d9dce1;
+  --accent: #2563eb;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #1e1f22;
+    --panel: #2b2d31;
+    --text: #e6e6e6;
+    --muted: #a0a0a0;
+    --line: #44474d;
+    --accent: #5b8def;
+  }
+}
+body {
+  margin: 0;
+  font-family: "Yu Gothic UI", "Meiryo UI", sans-serif;
+  background: var(--bg);
+  color: var(--text);
+}
+main {
+  max-width: 44em;
+  margin: 1.5em auto;
+  padding: 1.2em 2em;
+  background: var(--panel);
+  border-radius: 8px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.12);
+}
+h1 { margin: 0 0 0.8em; font-size: 1.4em; }
+.drop {
+  padding: 1em;
+  border: 2px dashed var(--line);
+  border-radius: 6px;
+}
+.drop.over { border-color: var(--accent); }
+.hint { color: var(--muted); margin-left: 0.8em; }
+.folder { margin-top: 0.5em; word-break: break-all; }
+.message { min-height: 1.4em; }
+progress { width: 100%; }
+.buttons { display: flex; gap: 0.5em; margin: 1em 0; }
+button {
+  font: inherit;
+  padding: 0.4em 1.2em;
+  border: 1px solid var(--accent);
+  border-radius: 4px;
+  background: var(--accent);
+  color: #fff;
+  cursor: pointer;
+}
+button.secondary { background: transparent; color: var(--accent); }
+button:disabled, button.xljs-busy { opacity: 0.6; cursor: progress; }
+table { width: 100%; border-collapse: collapse; }
+th, td { padding: 0.3em 0.6em; border-bottom: 1px solid var(--line); text-align: left; }
+td:nth-child(n + 2), th:nth-child(n + 2) { text-align: right; }
+#warnings { color: #c0392b; }
