@@ -530,3 +530,34 @@ fn debug_map() {
         for l in 1..20 { eprintln!("{l}: {:?}", m.lookup(l, 12)); }
     }
 }
+
+/// The code in the documents for AI chats (docs/ai) is valid syntax, since
+/// the models copy it as is; prompt.md and the Copilot instructions stay
+/// within the size limits of the chats' input boxes.
+#[test]
+fn ai_docs() {
+    let re = regex::Regex::new("(?s)```js\n(.*?)```").unwrap();
+    for (name, limit) in [
+        ("prompt.md", 15000),
+        ("reference.md", 0),
+        ("copilot/instructions.md", 8000),
+        ("copilot/skills/xljs-reference/SKILL.md", 0),
+        ("copilot/skills/vba-port/SKILL.md", 0),
+    ] {
+        let src = std::fs::read_to_string(repo_path(&format!("docs/ai/{name}"))).unwrap().replace("\r\n", "\n");
+        let n = src.chars().count();
+        assert!(limit == 0 || n <= limit, "{name} is {n} characters; keep it within {limit}");
+        let blocks: Vec<_> = re.captures_iter(&src).collect();
+        assert!(!blocks.is_empty(), "{name}: no js code blocks");
+        for (i, b) in blocks.iter().enumerate() {
+            let p = write_script("block.js", &b[1]);
+            if let Err(e) = bundle(&p) {
+                panic!("{name}: code block {}: {e}", i + 1);
+            }
+        }
+    }
+    // The reference skill for Copilot agents is a copy of reference.md.
+    let want = std::fs::read_to_string(repo_path("docs/ai/reference.md")).unwrap().replace("\r\n", "\n");
+    let got = std::fs::read_to_string(repo_path("docs/ai/copilot/skills/xljs-reference/SKILL.md")).unwrap().replace("\r\n", "\n");
+    assert_eq!(got, want, "copilot/skills/xljs-reference/SKILL.md differs from reference.md");
+}

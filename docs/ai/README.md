@@ -61,5 +61,5 @@ AI は xljs を知らないので、そのままだと Node.js 用のコード�
 ## 資料を更新するとき（開発者向け）
 
 - API を変えたら `types/xljs.d.ts` と合わせて `prompt.md`・`reference.md`・`copilot/instructions.md` も直し、`reference.md` を `copilot/skills/xljs-reference/SKILL.md` にコピーする（`go test` が一致を検査する）。ここに書いたことは AI がそのまま使うので、存在しないオプションや古い書き方を残さない。
-- `go test ./internal/engine` がコードブロック（```js）の構文と、`prompt.md` の長さ（貼り付けの上限に収まるよう 15,000 字以内）、`copilot/instructions.md` の長さ（8,000 字以内）を検査する。
+- `cargo test --lib ai_docs` がコードブロック（```js）の構文と、`prompt.md` の長さ（貼り付けの上限に収まるよう 15,000 字以内）、`copilot/instructions.md` の長さ（8,000 字以内）を検査する。
 - コード例は `xljs --ui=mock --ui-answers=応答.json` で実際に動かして確かめる。

@@ -34,6 +34,7 @@ fn embed(out: &mut String, name: &str, dir: &str) {
 }
 
 fn main() {
+    println!("cargo:rerun-if-env-changed=XLJS_VERSION");
     let mut s = String::new();
     embed(&mut s, "WEB_FILES", "src/ui/web");
     embed(&mut s, "DAYJS_FILES", "src/api/dayjs");
