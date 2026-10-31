@@ -6,6 +6,7 @@ Go 版 xljs（github.com/cool0707/xljs）の Rust 移植。開発はこの Rust 
 Excel 未インストール環境で動くこと、日本語環境での使い勝手（CP932、游ゴシック、日本語メッセージ）を重視する。
 
 HTML UI・フォーム・表表示・デバッガの設計は `docs/handoff-ui.md`（Go 版で書かれたメモ。仕組みは同じ）を参照。
+グラフ・ガントチャート（AG Charts / Frappe Gantt、Excel のグラフからの変換）の設計は `docs/charts-design.md`（検討中）。
 
 ## 構成
 
