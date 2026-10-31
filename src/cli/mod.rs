@@ -374,6 +374,7 @@ const JSCONFIG: &str = r#"{
     "allowImportingTsExtensions": true,
     "noEmit": true,
     "checkJs": true,
+    "strict": false,
     "lib": ["ES2023"]
   },
   "include": ["*.js", "*.ts", "**/*.js", "**/*.ts", "xljs.d.ts"]

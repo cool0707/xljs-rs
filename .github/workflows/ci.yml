@@ -40,6 +40,14 @@ jobs:
             exit 1
           fi
           cat test.log
+      - name: Type-check the examples
+        if: runner.os == 'Linux'
+        # With the d.ts and jsconfig.json that `xljs init` writes, as users get them.
+        run: |
+          ex="$RUNNER_TEMP/examples"
+          cp -r examples "$ex"
+          cargo run -q -- init "$ex"
+          cd "$ex" && npx -y -p typescript@6.0.2 tsc -p jsconfig.json
 
   build:
     needs: test

@@ -21,7 +21,7 @@ HTML UI・フォーム・表表示・デバッガの設計は `docs/handoff-ui.m
 | `src/pack` | exe 末尾へのスクリプト埋め込み。v2 = `[zip(manifest.json, main.js, assets/...)][len u64]["XLJSPAK2"]`、v1 も読める |
 | `types/xljs.d.ts` | 公開 API の型定義（`xljs init` で出力）。API を変えたら必ず更新 |
 | `testdata/scripts/*.test.{js,ts}` | モック UI で実行される結合テスト（`src/engine/tests.rs`）。`<name>.answers.json` がモック応答 |
-| `examples/` | サンプル |
+| `examples/` | サンプル。`xljs init` の d.ts と jsconfig.json で tsc の型チェックが通る状態を保つ（CI の ubuntu で検査） |
 | `docs/ai/` | AI チャット向けのプロンプトとリファレンス。`ai_docs` テストがコードブロックの構文と長さを検査 |
 
 ## 規約
