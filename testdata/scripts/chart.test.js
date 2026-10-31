@@ -26,6 +26,19 @@ throws(() => ui.chart({ data: rows, onClick: "x" }), /関数/);
 throws(() => ui.chart(null), /グラフの定義/);
 ui.chart({ data: [] }); // no rows: nothing to check
 
+// Progress line (イナズマ線) and cumulative progress curve over a Gantt chart.
+const plan = [
+  { 作業: "設計", 開始: new Date(2026, 10, 2), 終了: new Date(2026, 10, 6), 進捗: 1, 金額: 100 },
+  { 作業: "実装", 開始: new Date(2026, 10, 9), 終了: new Date(2026, 10, 20), 進捗: 0.3, 金額: 300 },
+];
+ui.chart({ type: "gantt", data: plan, baseDate: "2026-11-13", progressLine: true,
+  sCurve: { weight: "金額", actual: [{ date: new Date(2026, 10, 6), value: 15 }] } });
+ui.chart({ type: "gantt", data: plan, progressLine: { color: "#00F" }, sCurve: true });
+throws(() => ui.chart({ type: "gantt", data: plan, sCurve: { weight: "工数" } }), /列 "工数"/);
+throws(() => ui.chart({ type: "gantt", data: plan, sCurve: { actual: [{ date: "x", value: 1 }] } }), /sCurve.actual/);
+throws(() => ui.chart({ type: "gantt", data: plan, baseDate: "明日" }), /baseDate/);
+throws(() => ui.chart({ data: rows, progressLine: true }), /progressLine はガントチャート/);
+
 // Excel's charts.
 const book = workbooks.open(path.join(xljs.scriptDir, "..", "xlsx", "charts.xlsx"));
 const charts = book.sheets["売上"].charts;

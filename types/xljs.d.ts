@@ -588,6 +588,28 @@ declare global {
     holidays?: (Date | string | { date: Date | string; name?: string })[];
     /** 土日に色を付けるか（既定 true） */
     weekends?: boolean;
+    /** 進捗線・出来高累計曲線の基準日（既定は今日。その日の始まりの位置に縦の線を引く） */
+    baseDate?: Date | string;
+    /**
+     * 進捗線（イナズマ線）を重ねる。基準日の線から、各作業の進捗の位置（開始＋日数×進捗）を上から順に結ぶ。
+     * 基準日までに終わった作業と、基準日より後に始まる未着手の作業は基準日の線上の点になる（予定どおり）
+     */
+    progressLine?: boolean | { color?: string };
+    /**
+     * 出来高累計曲線（S カーブ）を重ねる。予定は各作業の出来高（weight の列。省略すると日数）を期間に均等に割り振った累計、
+     * 実績は actual（その日までの累計の進捗。% か 0〜1）に、基準日の現在の進捗（出来高×進捗の合計）を足した折れ線。
+     * 縦の目盛りは 0〜100%（左端に表示）
+     */
+    sCurve?: boolean | {
+      /** 作業ごとの出来高（金額・工数など）の列 */
+      weight?: string | number;
+      /** 過去の実績（基準日より前の分）。例: [{ date: new Date(2026, 3, 30), value: 12.5 }] */
+      actual?: { date: Date | string; value: number }[];
+      /** 予定の線の色（既定 "#4472C4"） */
+      color?: string;
+      /** 実績の線の色（既定 "#ED7D31"） */
+      actualColor?: string;
+    };
     // ---- 共通
     /** 点・棒・扇・作業がクリックされたとき（row は data の元の要素。series は系列の名前） */
     onClick?(row: any, info: { index: number; series: string | null }): unknown;

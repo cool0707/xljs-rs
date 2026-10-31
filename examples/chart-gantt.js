@@ -1,4 +1,4 @@
-// 工程表（作業・開始・終了・進捗・前提の列）をガントチャートで表示し、
+// 工程表（作業・開始・終了・進捗・前提・金額の列）をガントチャートで表示し、
 // バーのドラッグで変えた日付をブックに書き戻す。休日はスクリプトから渡す。
 const [file] = await showOpenFilePicker({ types: [{ description: "Excel", accept: [".xlsx"] }] });
 if (!file) exit();
@@ -20,6 +20,9 @@ const v = await ui.form({
       editable: true, // ドラッグで日付・進捗を変えると、元の行に書き込まれる
       // 終了日はその日を含む。土日と次の日に色を付ける
       holidays: [new Date(2026, 10, 3), { date: "2026-11-23", name: "勤労感謝の日" }],
+      // 今日を基準日に、進捗線（イナズマ線）と出来高累計曲線（金額の列で重み付け）を重ねる
+      progressLine: true,
+      sCurve: { weight: "金額" },
       onChange(row, changes) {
         console.log(row.作業, changes);
       },

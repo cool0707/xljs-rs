@@ -2551,6 +2551,7 @@
       views: { Day: T("chart.viewDay"), Week: T("chart.viewWeek"), Month: T("chart.viewMonth"), Year: T("chart.viewYear") },
       empty: T("chart.empty"), badSpec: T("chart.expectedSpec"), badType: T("chart.badType", "{0}"),
       noKey: T("chart.noKey", "{0}", "{1}"), noSeries: T("chart.noSeries"),
+      planned: T("chart.planned", "{0}"), actual: T("chart.actual", "{0}"),
     };
   }
 
@@ -2597,9 +2598,21 @@
       if (c.keys.start === undefined && data.length) throw new TypeError(T("chart.noStart"));
       const e = spec.editable;
       c.editable = e === true || (!!e && typeof e === "object" && (!!e.dates || !!e.progress));
+      // The progress line and the cumulative progress curve: the base date, the weight column and the actual progress.
+      if (spec.baseDate !== undefined && spec.baseDate !== null && !chartDate(spec.baseDate)) throw new TypeError(T("chart.badDate", "baseDate"));
+      const sc = spec.sCurve;
+      if (sc && typeof sc === "object") {
+        if (sc.weight !== undefined && sc.weight !== null) need(sc.weight, "sCurve.weight");
+        if (sc.actual !== undefined && !Array.isArray(sc.actual)) throw new TypeError(T("chart.badActual"));
+        for (const a of Array.from(sc.actual || [])) {
+          if (!a || typeof a !== "object" || !chartDate(a.date) || !isFinite(Number(plainDate(a.value)))) throw new TypeError(T("chart.badActual"));
+        }
+      }
       return c;
     }
-    if (spec.editable) throw new TypeError(T("chart.notGantt", "editable"));
+    for (const k of ["editable", "progressLine", "sCurve", "baseDate"]) {
+      if (spec[k] !== undefined && spec[k] !== null && spec[k] !== false) throw new TypeError(T("chart.notGantt", k));
+    }
     const x = spec.x !== undefined && spec.x !== null ? need(spec.x, "x") : keys[0];
     let ys = spec.y;
     if (ys === undefined || ys === null) {
@@ -2618,6 +2631,14 @@
     if (!series.length && type !== "histogram" && data.length) throw new TypeError(T("chart.noSeries"));
     c.keys = { x, series };
     return c;
+  }
+
+  /** A date given to a Gantt chart: Date, "2026-04-01" / "2026/4/1", or null. */
+  function chartDate(v) {
+    v = plainDate(v);
+    if (v instanceof Date) return isNaN(v) ? null : v;
+    const m = typeof v === "string" ? /^(\d{4})[-/](\d{1,2})[-/](\d{1,2})/.exec(v.trim()) : null;
+    return m ? new Date(+m[1], +m[2] - 1, +m[3]) : null;
   }
 
   /** A value for the page: JSON, dates as { $date: ms }; functions are left out. */

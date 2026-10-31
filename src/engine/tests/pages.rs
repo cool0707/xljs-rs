@@ -667,7 +667,12 @@ fn chart_window() {
             spec.contains(r#""日":{"$date":"#) && spec.contains(r#""type":"line""#) && !spec.contains("onClick"),
             "spec = {spec}"
         );
-        check!(p, init["texts"]["today"] == "今日" && init["texts"]["views"]["Week"] == "週", "texts = {}", as_json(&init["texts"]));
+        check!(
+            p,
+            init["texts"]["today"] == "今日" && init["texts"]["views"]["Week"] == "週" && init["texts"]["planned"] == "予定 {0}%",
+            "texts = {}",
+            as_json(&init["texts"])
+        );
         p.send(json!({"type": "click", "index": 1, "series": "売上"}), &[]);
         let u = p.expect("update");
         check!(p, u["spec"]["type"] == "column" && u["spec"]["data"].as_array().map(|a| a.len()) == Some(1), "update = {}", as_json(&u));

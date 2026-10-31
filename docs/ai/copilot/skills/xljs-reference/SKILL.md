@@ -400,6 +400,7 @@ await ui.form({
 - 種類（`type`）: `column`（縦棒、既定）`bar`（横棒）`line` `area` `scatter` `bubble`（系列に `size`）`histogram`（`bins`）`pie` `donut` `gantt`。`stacked: true` / `"percent"` で積み上げ。
 - `data` は行オブジェクトの配列（`ui.table` と同じ）。`x` を省くと先頭の列、`y` を省くと数値の列すべて。日付の列は時間の軸になる（折れ線・面）。
 - 書式は Excel の書式文字列（`format`、`axes.x/y/y2.format`、系列の `format`）。色は `colors`（既定は Excel と同じ Office の色）。
+- ガントには進捗線（イナズマ線、`progressLine: true`）と出来高累計曲線（S カーブ、`sCurve: { weight: "金額", actual: [{ date, value }] }`）を重ねられる。基準日は `baseDate`（既定は今日）。
 - ガントの列は省くと `名前`/`作業`・`開始`/`開始日`・`終了`/`終了日`・`進捗`・`前提` の列を探す。進捗は 0〜100（すべて 0〜1 なら割合）。前提は名前（`id` 列があればその値）を「,」区切りで。土日は既定で色が付く（`weekends: false` で消す）。
 - 関数は `onClick` / `onChange` だけ使える（ほかのオプションは JSON で表せる値のみ）。ライブラリ固有の指定は `options`（AG Charts / Frappe Gantt のオプションに重ねる）。
 - `sheet.charts` で読めないもの: レーダー・株価・等高線、Excel 2016 以降のウォーターフォール・ツリーマップ・サンバースト・ヒストグラム・箱ひげ図・じょうご・マップ（`supported: false`）。3-D は平面に、近似曲線・誤差範囲・データテーブル・補助円は省く（`warnings` に出る）。開始日の系列を塗りなしにした積み上げ横棒はガントチャートにする（`toSpec({ gantt: false })` で横棒のまま）。

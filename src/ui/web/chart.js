@@ -355,6 +355,8 @@
       },
       __texts: texts,
     };
+    const overlay = ganttOverlay(spec, r, ratio, texts, lang);
+    if (overlay) options.__overlay = overlay;
     if (ctx.height) options.container_height = ctx.height;
     if (ctx.onClick) {
       // Frappe Gantt reports a click more than once.
@@ -388,7 +390,146 @@
         report(t.id, { progress: ratio ? v / 100 : v });
       };
     }
-    return { tasks, options: isObj(spec.options) ? merge(options, spec.options) : options, ratio };
+    if (overlay) {
+      // The lines follow the bars as they are dragged.
+      for (const ev of ["on_date_change", "on_progress_change"]) {
+        const f = options[ev];
+        options[ev] = function (...a) {
+          drawOverlay(this);
+          if (f) f.apply(this, a);
+        };
+      }
+    }
+    return { tasks, options: isObj(spec.options) ? merge(options, spec.options) : options, ratio, view };
+  }
+
+  // ---- progress line (イナズマ線) and cumulative progress curve (出来高累計曲線)
+
+  /**
+   * What drawOverlay needs, or null without progressLine and sCurve: the
+   * base date (baseDate, default today), the colors, the weight of each
+   * task by its id (the weight column, default its days) and the actual
+   * progress so far ({ date, value } in percent, or 0..1).
+   */
+  function ganttOverlay(spec, r, ratio, texts, lang) {
+    const line = spec.progressLine, curve = spec.sCurve;
+    if (!line && !curve) return null;
+    const base = toDate(spec.baseDate) || new Date();
+    const o = {
+      base: new Date(base.getFullYear(), base.getMonth(), base.getDate()).getTime(), texts, lang,
+      line: line ? { color: (isObj(line) && line.color) || "#E00000" } : null,
+      curve: null,
+    };
+    if (curve) {
+      const c = isObj(curve) ? curve : {};
+      const weights = {};
+      if (c.weight !== undefined && c.weight !== null) {
+        r.rows.forEach((row, i) => { const w = num(cell(row, c.weight)); weights[String(i)] = w !== undefined && w > 0 ? w : 0; });
+      }
+      const pts = Array.from(c.actual || []).map((a) => ({ t: toDate(isObj(a) ? a.date : null), v: num(isObj(a) ? a.value : null) }))
+        .filter((a) => a.t && a.v !== undefined);
+      const frac = pts.length && pts.every((a) => a.v >= 0 && a.v <= 1);
+      o.curve = {
+        planned: c.color || "#4472C4", actual: c.actualColor || "#ED7D31",
+        weights: c.weight !== undefined && c.weight !== null ? weights : null,
+        history: pts.map((a) => ({ t: a.t.getTime(), v: frac ? a.v : a.v / 100 })).sort((a, b) => a.t - b.t),
+      };
+    }
+    void ratio;
+    return o;
+  }
+
+  const SVG_NS = "http://www.w3.org/2000/svg";
+  const svg = (tag, attrs, parent) => {
+    const e = document.createElementNS(SVG_NS, tag);
+    for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, String(v));
+    if (parent) parent.append(e);
+    return e;
+  };
+
+  /** The x of a time on the chart: between the columns' dates, as the grid is drawn. */
+  function xOf(g, t) {
+    const d = g.dates, w = g.config.column_width;
+    if (!d || !d.length) return 0;
+    if (t <= d[0].getTime()) return 0;
+    for (let k = 0; k < d.length; k++) {
+      const a = d[k].getTime();
+      const b = k + 1 < d.length ? d[k + 1].getTime() : a + (a - (k > 0 ? d[k - 1].getTime() : a - 86400000));
+      if (t < b) return (k + (t - a) / (b - a)) * w;
+    }
+    return d.length * w;
+  }
+
+  /** Draws the progress line and the cumulative progress curve over the chart (again after each render and edit). */
+  function drawOverlay(g) {
+    const o = g.options.__overlay;
+    if (!o || !g.$svg || !g.bars) return;
+    const old = g.$svg.querySelector(".xljs-overlay");
+    if (old) old.remove();
+    if (g.__xljsScroll) g.$container.removeEventListener("scroll", g.__xljsScroll);
+    const layer = svg("g", { class: "xljs-overlay" }, g.$svg);
+    const top = g.config.header_height, bottom = g.grid_height;
+    const bx = xOf(g, o.base);
+    const bars = g.bars.filter((b) => b.$bar).map((b) => ({ b, t: b.task, x: b.$bar.getX(), w: b.$bar.getWidth(), y: b.$bar.getY(), h: b.$bar.getHeight() }))
+      .sort((a, b) => a.y - b.y);
+    svg("line", { x1: bx, x2: bx, y1: top, y2: bottom, class: "xljs-base-line" }, layer);
+    if (o.line && bars.length) {
+      // Each task's point: where its progress has reached; on the base line
+      // when it is done before the base date or not started after it.
+      const pts = [[bx, top]];
+      for (const a of bars) {
+        const p = Math.max(0, Math.min(100, Number(a.t.progress) || 0));
+        const end = a.x + a.w;
+        let x = a.x + (a.w * p) / 100;
+        if ((p >= 100 && end <= bx) || (p <= 0 && a.x >= bx)) x = bx;
+        pts.push([x, a.y + a.h / 2]);
+      }
+      const last = bars[bars.length - 1];
+      pts.push([bx, Math.min(bottom, last.y + last.h + (g.options.padding || 18) / 2)]);
+      svg("polyline", { points: pts.map((q) => q.join(",")).join(" "), class: "xljs-progress-line", stroke: o.line.color }, layer);
+      for (const q of pts.slice(1, -1)) svg("circle", { cx: q[0], cy: q[1], r: 3, fill: o.line.color, class: "xljs-progress-point" }, layer);
+    }
+    if (o.curve && bars.length) drawCurve(g, o, bars, layer, top, bottom, bx);
+  }
+
+  function drawCurve(g, o, bars, layer, top, bottom, bx) {
+    const c = o.curve;
+    const y0 = bottom - 8, y1 = top + 8;
+    const yOf = (v) => y0 - (y0 - y1) * v;
+    const tasks = bars.map((a) => {
+      const s = a.t._start.getTime(), e = a.t._end.getTime();
+      const w = c.weights ? c.weights[a.t.id] || 0 : Math.max(1, Math.round((e - s) / 86400000));
+      return { s, e, w, p: Math.max(0, Math.min(100, Number(a.t.progress) || 0)) / 100 };
+    });
+    const total = tasks.reduce((n, t) => n + t.w, 0);
+    if (!(total > 0)) return;
+    const planned = (t) => tasks.reduce((n, k) => n + k.w * Math.max(0, Math.min(1, (t - k.s) / (k.e - k.s || 1))), 0) / total;
+    // Planned: sampled at every column and at every start and end.
+    const times = new Set(tasks.flatMap((k) => [k.s, k.e]));
+    for (const d of g.dates) times.add(d.getTime());
+    const first = Math.min(...tasks.map((k) => k.s)), lastT = Math.max(...tasks.map((k) => k.e));
+    const ts = [...times].filter((t) => t >= first && t <= lastT).sort((a, b) => a - b);
+    svg("polyline", { points: ts.map((t) => `${xOf(g, t)},${yOf(planned(t))}`).join(" "), class: "xljs-curve", stroke: c.planned }, layer);
+    // Actual: the history given, then the progress now at the base date.
+    const now = tasks.reduce((n, k) => n + k.w * k.p, 0) / total;
+    const hist = c.history.filter((h) => h.t < o.base).concat([{ t: o.base, v: now }]);
+    if (hist.length > 1) {
+      svg("polyline", { points: hist.map((h) => `${xOf(g, h.t)},${yOf(h.v)}`).join(" "), class: "xljs-curve actual", stroke: c.actual }, layer);
+    }
+    for (const h of hist) svg("circle", { cx: xOf(g, h.t), cy: yOf(h.v), r: 3.5, fill: c.actual }, layer);
+    const pct = (v) => Math.round(v * 1000) / 10;
+    const label = svg("text", { x: bx + 6, y: top + 14, class: "xljs-curve-label" }, layer);
+    label.textContent = fill(o.texts.planned || "Planned {0}%", pct(planned(o.base))) + " / " + fill(o.texts.actual || "Actual {0}%", pct(now));
+    // The percent scale stays at the left of the visible area.
+    const scale = svg("g", { class: "xljs-curve-scale" }, layer);
+    for (const v of [0, 0.25, 0.5, 0.75, 1]) {
+      svg("line", { x1: 0, x2: 6, y1: yOf(v), y2: yOf(v) }, scale);
+      svg("text", { x: 8, y: yOf(v) + 4 }, scale).textContent = v * 100 + "%";
+    }
+    const follow = () => scale.setAttribute("transform", `translate(${g.$container.scrollLeft},0)`);
+    follow();
+    g.__xljsScroll = follow;
+    g.$container.addEventListener("scroll", follow);
   }
 
   const escape = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
@@ -409,6 +550,12 @@
           else if (t.views && t.views[o.value]) o.textContent = t.views[o.value];
         }
       }
+    };
+    // The progress line and the curve are drawn again whenever the chart is (view changes, refresh).
+    const render = G.prototype.render;
+    G.prototype.render = function () {
+      render.apply(this, arguments);
+      drawOverlay(this);
     };
     G.prototype.__xljs = true;
   }
@@ -463,6 +610,9 @@
           return;
         }
         gantt = new window.Gantt(el, g.tasks, g.options);
+        // Frappe Gantt starts on the first of view_modes whatever view_mode says.
+        const view = isObj(s.options) && typeof s.options.view_mode === "string" ? s.options.view_mode : g.view;
+        if (gantt.config.view_mode.name !== view) gantt.change_view_mode(view);
       } else {
         const o = agOptions(s, r, c);
         el.classList.remove("xljs-gantt");
