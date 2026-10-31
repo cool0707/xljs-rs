@@ -47,6 +47,9 @@ pub struct Meta {
     pub height: i64,
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub icon: String,
+    /// "custom" hides the OS title bar of the main window ("" = system).
+    #[serde(default, skip_serializing_if = "String::is_empty", rename = "titleBar")]
+    pub title_bar: String,
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub lang: String,
 }
@@ -163,6 +166,13 @@ pub fn parse(name: &str, src: &[u8]) -> Result<(Meta, Vec<String>)> {
                     return Err(err!("meta.badIcon", at(), val));
                 }
                 m.icon = p;
+            }
+            "titlebar" => {
+                let v = val.to_lowercase();
+                if v != "system" && v != "custom" {
+                    return Err(err!("meta.badTitleBar", at(), val));
+                }
+                m.title_bar = if v == "custom" { v } else { String::new() };
             }
             "lang" => m.lang = val,
             _ => warnings.push(t!("meta.unknownKey", at(), format!("@{}", &c[1]))),

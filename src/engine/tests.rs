@@ -93,10 +93,12 @@ fn check_script_output(name: &str, r: &Res) -> Vec<String> {
         "app.test.js" => want_in(
             &r.stderr,
             &[
-                r#"window.open("アプリのテスト", "https://app.xljs/ui/index.html", 640x480)"#,
+                r#"window.open("アプリのテスト", "https://app.xljs/ui/index.html", 640x480, titlebar)"#,
                 r#"window.open("詳細", "https://app.xljs/ui/sub%20page.html", 300x200)"#,
                 r#"window.closed("詳細")"#,
                 r#"window.open("固定", "https://app.xljs/ui/sub%20page.html", 320x240, fixed)"#,
+                r#"window.open("自前", "https://app.xljs/ui/sub%20page.html", 0x0, titlebar "fa-regular fa-calendar")"#,
+                r#"window.open("OS", "https://app.xljs/ui/sub%20page.html", 0x0)"#,
             ],
             "mock log",
         ),

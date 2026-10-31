@@ -96,6 +96,7 @@ xljsc pack 集計.js -o 集計.exe （コンソール版をベースにする場
 // @title   売上集計ツール  // ダイアログ・ウィンドウのタイトル（既定はスクリプト名）
 // @size    960x640        // ウィンドウの大きさ
 // @icon    ui/app.ico     // ウィンドウのアイコン（.ico か .png。exe にも同梱）
+// @titlebar custom        // メインウィンドウを自前のタイトルバーにする（既定は system）
 // @lang    ja             // メッセージの言語（--lang / XLJS_LANG が優先）
 // ==/xljs==
 ```
@@ -104,6 +105,7 @@ xljsc pack 集計.js -o 集計.exe （コンソール版をベースにする場
 - `@mode app` にすると、スクリプトの実行前に `@html` のページを表示するウィンドウ（`app.main`）が開き、ウィンドウを閉じるまでプロセスは終了しません。`app.open({ html, title, width, height })` で別のウィンドウも開けます（`await win.closed` で閉じるのを待てます）。画面とのやり取りは「[アプリ（HTML の画面）](#アプリhtml-の画面)」を参照。サンプル: `examples/app-hello/`、`examples/app-aggregate/`
 - ウィンドウは Microsoft Edge WebView2 で表示します（Windows 10/11 には通常インストール済み）。ランタイムがない場合はダウンロードページを案内して終了します。ページは `https://app.xljs/` から配信され、見えるのは `@html` と `@assets` に書いたファイルだけです（pack した exe と同じ）。ほかの URL へのリンクは既定のブラウザで開きます。
 - `@icon` を書くと、メインウィンドウ・`app.open` のウィンドウ・`ui.form` / `ui.table` のウィンドウのタイトルバーとタスクバーのアイコンがそのファイルになります（.ico は複数サイズ入りを推奨）。exe ファイル自体のアイコン（エクスプローラーでの表示）は変わりません。
+- `titleBar: "custom"`（`app.open` / `ui.form` / `ui.table` のオプション。メインウィンドウはメタデータの `@titlebar custom`）にすると、PWA のように OS のタイトルバーを使わず、ページの上端に自前のタイトルバー（アイコン・タイトル・最小化／最大化／閉じるボタン）を表示します。ドラッグで移動、ダブルクリックで最大化でき、ライト・ダークの配色に従います。`icon` に Font Awesome のアイコン（`"table"` や `"fa-regular fa-calendar"`）を指定するとタイトルの前に表示します（`titleBar` が `"system"` のときは `icon` は無視）。`width` / `height` はタイトルバー（32px）を除いた大きさです。コンソール・モックでは無視されます。
 
 ### デバッグ
 
@@ -188,7 +190,7 @@ if (!v) exit();              // v.src は FileSystemDirectoryHandle、v.out は 
 - `editable: true`（または列ごとに `columns: [{ key, editable: true }]`）でセルをその場で編集できます。列に `type`（`text` `number` `date` `month` `time` `select` `checkbox`。既定は値から判断）、`required` `min` `max` `pattern` `options`、`validate(value, row, index)` を書くと入力のたびに検証し、エラーのセルを赤く表示して表の下に一覧を出します（クリックでそのセルへ）。行全体の検証は項目の `validateRow(row, index)`。エラーが残っていると送信できません。検証を通った値は元の行オブジェクトに直接書き込まれます。Enter で下のセルへ移ります。数値は全角数字や「1,000」も受け付けます。コンソールでは表のあとに編集する行の番号を尋ねます。
 - `tabs: [{ label, fields }]` を指定するとタブで項目を切り替えて表示します（`fields` はタブの上に常に表示）。値はタブに関係なく 1 つのオブジェクトにまとまります。エラーのある項目のタブには印が付き、そのタブに切り替わります。Ctrl+Tab でも切り替えられます。サンプル: `examples/form-tabs-table.js`
 - ウィンドウのアイコンはメタデータの `@icon` で変えられます（`@mode app` でなくても有効。表も同じ）。
-- 同梱の [Font Awesome Free](https://fontawesome.com/icons) のアイコンを、項目のラベル（`icon`）、タブ（`tabs: [{ label, icon, fields }]`）、ボタン（`buttons: [{ label, icon, ... }]`、送信ボタンは `submitIcon`）に付けられます。`"folder-open"` のように名前だけなら solid、`"fa-regular fa-calendar"` のようにクラスでも書けます。フォームの `icon` を指定すると、ページの先頭にアイコン付きでタイトルを表示します（タイトルバー自体は文字だけです）。コンソール・モックでは無視されます。
+- 同梱の [Font Awesome Free](https://fontawesome.com/icons) のアイコンを、項目のラベル（`icon`）、タブ（`tabs: [{ label, icon, fields }]`）、ボタン（`buttons: [{ label, icon, ... }]`、送信ボタンは `submitIcon`）に付けられます。`"folder-open"` のように名前だけなら solid、`"fa-regular fa-calendar"` のようにクラスでも書けます。フォームの `icon` は `titleBar: "custom"` のときに自前のタイトルバーでタイトルの前に表示します（`"system"` では無視）。コンソール・モックでは無視されます。
 - 検証: `required`、`pattern`（＋`patternMessage`）、`min` / `max`、ファイル・フォルダの存在、項目ごとの `validate(value, values)`（メッセージを返す）。これらは入力欄を離れたときに検証して項目の下に表示し、エラーの表示中は入力のたびに検証し直します（直すとすぐ消えます）。フォームの `validate(values)`（`{ 項目名: "メッセージ" }` か全体へのメッセージを返す）は送信時だけ呼ばれるので、項目をまたぐ検証に使います。
 - `onSubmit(values, ctx)` を書くと、実行後もウィンドウが開いたままになり、進捗（`ctx.progress(done, total, message)` / `ctx.withProgress(iterable)`。中止ボタンで `ctx.withProgress` のループから onSubmit が終わる）、ログ（`ctx.log` / `ctx.error`）、中止ボタン（`ctx.cancelled`）を表示します。出力ファイルを返すと完了後に「フォルダを開く」ボタンが出ます。サンプル: `examples/form-aggregate.js`
 - `buttons: [{ label, onClick(values, ctx) }]` で送信ボタンの左にボタンを追加できます。押すと `onClick` が `onSubmit` と同じように実行されます（進捗・ログ・中止。ウィンドウは開いたまま）。`validate: false` を付けると検証せずに入力のままの値で実行し（読み込み・クリアなど）、`close: true` を付けると正常に終わったらフォームを閉じます。`submit: false` で送信ボタンを出さないこともできます。`ctx.setValue(name, value)` で項目の値を変えられます。コンソールでは項目のあとにどのボタンを押すか尋ねます。
@@ -275,6 +277,16 @@ app.handle("dynamic", (x) => x * 2);       // export 以外の名前で登録
 - `data-action` の関数がエラーになると、エラーのダイアログを表示します（スクリプトは続行）。`xljs.invoke` のエラーは Promise の reject で、`catch` しなければ同じくダイアログになります。スクリプトの `win.on` / `$().on` のハンドラのエラーも同様です。
 - `win.$(sel).on(type, (e) => ...)` の `e` は DOM イベントではなく値（`type` `id` `name` `value` `checked` `dataset` `key`、submit ならフォームの値 `values`）。`{ preventDefault: true }` で既定の動作を止めます。
 - `data-action` の実行中は要素が無効になり、`xljs-busy` クラスが付きます。
+- `titleBar: "custom"` のウィンドウでは、タイトルバーが `<body>` の先頭に差し込まれます（高さは CSS 変数 `--xljs-titlebar-height`。`height: 100vh` のレイアウトは `calc(100vh - var(--xljs-titlebar-height))` に）。色は `--xljs-titlebar-bg` `--xljs-titlebar-fg` `--xljs-titlebar-accent` で変えられます。ページに `data-xljs-titlebar` 属性の要素があれば差し込まずにそれをタイトルバーとして使い（ドラッグで移動）、`data-xljs-window="minimize"` / `"maximize"` / `"close"` を付けたボタンでウィンドウを操作できます。
+
+```html
+<header data-xljs-titlebar class="my-bar">
+  <span>売上集計</span>
+  <button data-xljs-window="minimize">_</button>
+  <button data-xljs-window="close">×</button>
+</header>
+```
+
 - アイコンには同梱の [Font Awesome Free](https://fontawesome.com/icons)（7.3.1）が使えます。`<link rel="stylesheet" href="/_xljs/fontawesome/css/all.min.css">` を書き、`<i class="fa-solid fa-file-excel"></i>` のように使います（インターネット接続は不要）。
 
 モック UI では応答ファイルの `"app"` にウィンドウごとの操作の列を書くと、画面の代わりに実行してログに出します（サンプル: `testdata/scripts/bridge.test.answers.json`）。

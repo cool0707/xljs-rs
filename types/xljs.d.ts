@@ -373,7 +373,7 @@ declare global {
     submit?: string | false;
     /** 送信ボタンの Font Awesome のアイコン（FormField の icon と同じ） */
     submitIcon?: string;
-    /** 指定するとページの先頭にこのアイコン（FormField の icon と同じ）とタイトルを見出しとして表示する */
+    /** 自前のタイトルバー（titleBar: "custom"）でタイトルの前に出す Font Awesome のアイコン（FormField の icon と同じ）。titleBar が "system" なら無視 */
     icon?: string;
     /**
      * 送信ボタンの左に並べるボタン。押すと onClick を onSubmit と同じように実行する（進捗・ログ・中止。ウィンドウは開いたまま）。
@@ -402,6 +402,11 @@ declare global {
     height?: number;
     /** false にするとウィンドウの大きさを固定する（枠のドラッグ・最大化ができない）。既定は true */
     resizable?: boolean;
+    /**
+     * "custom" にすると OS のタイトルバーを隠し、ページの上端に自前のタイトルバー（icon とタイトル、最小化・最大化・閉じるボタン）を表示する。
+     * width / height はタイトルバーを除いた大きさ。既定は "system"（OS のタイトルバー）
+     */
+    titleBar?: "system" | "custom";
   }
 
   // ------------------------------------------------------------------ ui.table
@@ -445,6 +450,13 @@ declare global {
     height?: number;
     /** false にするとウィンドウの大きさを固定する。既定は true */
     resizable?: boolean;
+    /**
+     * "custom" にすると OS のタイトルバーを隠し、ページの上端に自前のタイトルバー（icon とタイトル、最小化・最大化・閉じるボタン）を表示する。
+     * width / height はタイトルバーを除いた大きさ。既定は "system"（OS のタイトルバー）
+     */
+    titleBar?: "system" | "custom";
+    /** 自前のタイトルバーでタイトルの前に出す Font Awesome のアイコン（FormField の icon と同じ）。titleBar が "system" なら無視 */
+    icon?: string;
     /**
      * 行（セル）をダブルクリックしたときに呼ばれる。ファイルを開く・メッセージを出すなどに使う。
      * 指定すると selectable: "single" でもダブルクリックで OK にはならない。
@@ -492,6 +504,14 @@ declare global {
     height?: number;
     /** false にするとウィンドウの大きさを固定する（枠のドラッグ・最大化ができない）。既定は true */
     resizable?: boolean;
+    /**
+     * "custom" にすると OS のタイトルバーを隠し、ページの <body> の先頭に自前のタイトルバー（icon とタイトル、最小化・最大化・閉じるボタン）を差し込む。
+     * ページに data-xljs-titlebar 属性の要素があれば差し込まずにそれをタイトルバーにする（ドラッグで移動。中の data-xljs-window="minimize" / "maximize" / "close" のボタンでウィンドウを操作）。
+     * width / height はタイトルバー（32px）を除いた大きさ。既定は "system"。メインウィンドウはメタデータの @titlebar custom
+     */
+    titleBar?: "system" | "custom";
+    /** 自前のタイトルバーでタイトルの前に出す Font Awesome のアイコン（"table" や "fa-regular fa-calendar"）。titleBar が "system" なら無視 */
+    icon?: string;
   }
   /**
    * 画面との間で受け渡せる値: JSON の値に加えて Date、ファイル/フォルダのハンドル、

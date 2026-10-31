@@ -45,9 +45,6 @@ host.on((m) => {
 function init(m) {
   texts = m.texts || {};
   fields = m.fields || [];
-  // The title is the window's; with an icon it is shown as a heading too.
-  $("heading").replaceChildren(...withIcon(m.icon, m.title || ""));
-  $("heading").hidden = !m.icon;
   if (m.description) {
     $("description").textContent = m.description;
     $("description").hidden = false;

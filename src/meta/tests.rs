@@ -3,7 +3,7 @@ use crate::i18n;
 
 #[test]
 fn parse_block() {
-    let src = "\u{FEFF}#!/usr/bin/env xljs\n// Sales tool\n\n// ==xljs==\n// @mode    app            // console（既定）| app\n// @html    ui\\index.html\n// @assets  ui/ img\n// @assets  data/list.csv\n// @title   売上集計ツール // comment\n// @size    960x640\n// @lang    ja\n// @icon    img/App.ICO\n// @author  someone\n// free text\n// ==/xljs==\n// @mode console\nconsole.log(1);\n";
+    let src = "\u{FEFF}#!/usr/bin/env xljs\n// Sales tool\n\n// ==xljs==\n// @mode    app            // console（既定）| app\n// @html    ui\\index.html\n// @assets  ui/ img\n// @assets  data/list.csv\n// @title   売上集計ツール // comment\n// @size    960x640\n// @lang    ja\n// @icon    img/App.ICO\n// @titlebar Custom\n// @author  someone\n// free text\n// ==/xljs==\n// @mode console\nconsole.log(1);\n";
     let (m, warns) = parse("a.js", src.as_bytes()).unwrap();
     let want = Meta {
         mode: "app".into(),
@@ -14,9 +14,10 @@ fn parse_block() {
         height: 640,
         lang: "ja".into(),
         icon: "img/App.ICO".into(),
+        title_bar: "custom".into(),
     };
     assert_eq!(m, want);
-    assert!(warns.len() == 1 && warns[0].contains("@author") && warns[0].contains("a.js:13"), "{warns:?}");
+    assert!(warns.len() == 1 && warns[0].contains("@author") && warns[0].contains("a.js:14"), "{warns:?}");
     assert!(m.is_app());
 }
 
@@ -39,6 +40,7 @@ fn parse_errors() {
         ("// ==xljs==\n// @mode app\n", "==/xljs=="),
         ("// ==xljs==\n// @icon ui/app.bmp\n// ==/xljs==\n", "@icon"),
         ("// ==xljs==\n// @icon ../app.ico\n// ==/xljs==\n", "../app.ico"),
+        ("// ==xljs==\n// @titlebar none\n// ==/xljs==\n", "@titlebar"),
     ] {
         let e = parse("a.js", src.as_bytes()).unwrap_err();
         assert!(e.to_string().contains(want), "{src:?}: {e}");

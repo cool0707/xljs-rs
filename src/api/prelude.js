@@ -1195,7 +1195,7 @@
 
   /** An HTML window opened by app.open (or the main window of @mode app). */
   class AppWindow {
-    constructor(html, winTitle, width, height, fixedSize) {
+    constructor(html, winTitle, width, height, fixedSize, titleBar, icon) {
       define(this, "_queue", []);        // messages until the page is ready
       define(this, "_ready", false);
       define(this, "_closed", false);
@@ -1216,7 +1216,8 @@
           return true;
         },
       }));
-      define(this, "_n", native.appOpen(html, winTitle, width, height, (text, files) => this._receive(text, files), !!fixedSize));
+      define(this, "_n", native.appOpen(html, winTitle, width, height, (text, files) => this._receive(text, files), !!fixedSize,
+        !!titleBar, icon || ""));
       /** Resolves when the window has been closed. */
       define(this, "closed", this._n.closed.then(() => {
         this._closed = true;
@@ -1385,7 +1386,8 @@
       if (typeof options === "string") options = { html: options };
       return new AppWindow(options.html === undefined ? "" : String(options.html),
         options.title === undefined ? title() : String(options.title),
-        Number(options.width) || 0, Number(options.height) || 0, options.resizable === false);
+        Number(options.width) || 0, Number(options.height) || 0, options.resizable === false,
+        customTitleBar(options.titleBar), faClass(options.icon));
     },
     /**
      * Lets windows call fn by name (xljs.invoke), like an export of the
@@ -1404,7 +1406,8 @@
   };
   defineGlobal("app", appObj);
   native.openMain = () => {
-    appObj.main = new AppWindow(native.appHTML || "", title(), native.appWidth || 0, native.appHeight || 0);
+    appObj.main = new AppWindow(native.appHTML || "", title(), native.appWidth || 0, native.appHeight || 0, false,
+      native.appTitleBar === "custom");
   };
 
   // ---------------------------------------------------------------- forms & tables
@@ -1420,7 +1423,7 @@
       let m;
       try { m = JSON.parse(text); } catch (e) { return; }
       if (m && typeof m.type === "string") onMessage(m, files.filter((f) => f !== ""));
-    }, !!opts.fixedSize);
+    }, !!opts.fixedSize, !!opts.titleBar, opts.icon || "");
     return { n, send: (m) => n.post(JSON.stringify(m)) };
   }
 
@@ -1562,6 +1565,16 @@
    * The Font Awesome classes for an icon option: a bare name ("folder") is
    * the solid icon, classes ("fa-regular fa-folder") are kept.
    */
+  /**
+   * Whether a titleBar option asks for the custom title bar: "system"
+   * (default) or "custom".
+   */
+  function customTitleBar(v) {
+    if (v === undefined || v === null || v === "system") return false;
+    if (v === "custom") return true;
+    throw new TypeError(T("ui.badTitleBar", String(v)));
+  }
+
   function faClass(icon) {
     if (icon === undefined || icon === null || icon === "") return "";
     const words = String(icon).trim().split(/\s+/).filter((w) => /^[\w-]+$/.test(w));
@@ -1874,7 +1887,7 @@
       description: options.description ? String(options.description) : "",
       submit: options.submit ? String(options.submit) : "",
       noSubmit: options.submit === false && buttons.length > 0,
-      icon: faClass(options.icon), submitIcon: faClass(options.submitIcon),
+      titleBar: customTitleBar(options.titleBar), icon: faClass(options.icon), submitIcon: faClass(options.submitIcon),
       key, tabs, tabIcons, buttons,
     };
     return native.supportsWindows ? formWindow(o, fields, wire, options) : formPrompt(o, fields, wire, options);
@@ -1997,7 +2010,6 @@
 
   function formSize(o, fields, hasRun, options) {
     let h = 100;
-    if (o.icon) h += 44; // the heading
     if (o.description) h += 14 + 21 * Math.min(8, o.description.split("\n").reduce((n, l) => n + 1 + Math.floor(l.length / 40), 0));
     // Fields above the tabs, plus the tallest tab.
     const heights = o.tabs.map(() => 0);
@@ -2033,7 +2045,7 @@
       const sets = { n: 0, at: new Map() };
       // Cell edits and field checks are handled in order, and before a press of a button.
       let editQueue = Promise.resolve();
-      const page = openPage("form.html", Object.assign({ title: o.title }, formSize(o, fields, hasRun, options)),
+      const page = openPage("form.html", Object.assign({ title: o.title, titleBar: o.titleBar, icon: o.icon }, formSize(o, fields, hasRun, options)),
         (m, files) => { handle(m, files).catch(fail); });
       const finish = () => (failed ? reject(failed) : resolve(result));
       function fail(e) {
@@ -2046,7 +2058,7 @@
         switch (m.type) {
           case "ready":
             page.send({
-              type: "init", title: o.title, icon: o.icon, description: o.description, texts: formTexts(),
+              type: "init", description: o.description, texts: formTexts(),
               submit: o.submit, submitIcon: o.submitIcon, tabs: o.tabs, tabIcons: o.tabIcons,
               noSubmit: o.noSubmit, buttons: o.buttons.map((b) => b.label), buttonIcons: o.buttons.map((b) => b.icon),
               buttonTooltips: o.buttons.map((b) => b.tooltip),
@@ -2362,7 +2374,8 @@
       throw new TypeError(T("table.badHandler", "onDoubleClick"));
     }
     const t = options.title === undefined ? title() : String(options.title);
-    if (native.supportsWindows) return tableWindow(data, cols, sel, t, options);
+    const titleBar = customTitleBar(options.titleBar);
+    if (native.supportsWindows) return tableWindow(data, cols, sel, t, Object.assign({}, options, { titleBar }));
     const text = (v) => { const w = cellWire(v); return w === null ? "" : String(w); };
     const picked = native.uiTable(JSON.stringify({
       title: t, select: sel, columns: cols.map((c) => c.label), rows: data.map((r) => cols.map((c) => text(c.get(r)))),
@@ -2373,7 +2386,10 @@
 
   function tableWindow(data, cols, sel, t, options) {
     let picked = [];
-    const page = openPage("table.html", { title: t, width: Number(options.width) || 960, height: Number(options.height) || 600, fixedSize: options.resizable === false },
+    const page = openPage("table.html", {
+      title: t, width: Number(options.width) || 960, height: Number(options.height) || 600, fixedSize: options.resizable === false,
+      titleBar: options.titleBar, icon: faClass(options.icon),
+    },
       (m) => { handle(m).catch((e) => page.send({ type: "error", message: errorText(e) })); });
 
     async function handle(m) {
