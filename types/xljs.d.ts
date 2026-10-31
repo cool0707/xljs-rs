@@ -308,6 +308,21 @@ declare global {
     remember?: boolean;
   }
 
+  /**
+   * 項目のグループ。fields（タブの fields でも可）に項目と並べて書くと、見出しの下に項目をまとめて表示する。
+   * 値は項目の name でほかの項目と同じオブジェクトにまとまる（グループの中にグループは入れられない）。
+   * コンソールでは見出しを出してから順に尋ねる
+   */
+  interface FormGroup {
+    /** 見出し */
+    group: string;
+    /** 見出しの前に出す Font Awesome のアイコン（FormField の icon と同じ） */
+    icon?: string;
+    /** 見出しの下に出す説明 */
+    help?: string;
+    fields: FormField[];
+  }
+
   interface FormValues {
     [name: string]: any;
   }
@@ -362,13 +377,13 @@ declare global {
     title?: string;
     /** 項目の上に出す説明 */
     description?: string;
-    /** 項目（tabs があればタブの上に常に表示する項目） */
-    fields?: FormField[];
+    /** 項目（tabs があればタブの上に常に表示する項目）。{ group, fields } で見出し付きのグループにまとめられる */
+    fields?: (FormField | FormGroup)[];
     /**
      * タブ。各タブの項目はタブを切り替えて表示する（値は fields と同じく 1 つのオブジェクトにまとまるので、名前は全体で重複不可）。
      * コンソールではタブごとに見出しを出して順に尋ねる
      */
-    tabs?: { label: string; icon?: string; fields: FormField[] }[];
+    tabs?: { label: string; icon?: string; fields: (FormField | FormGroup)[] }[];
     /** 送信ボタンの文字（既定 "OK"）。false で送信ボタンを出さない（buttons があるときだけ） */
     submit?: string | false;
     /** 送信ボタンの Font Awesome のアイコン（FormField の icon と同じ） */

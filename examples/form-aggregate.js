@@ -6,12 +6,23 @@ const values = await ui.form({
   titleBar: "custom",   // OS のタイトルバーの代わりに自前のタイトルバーを使う
   icon: "chart-column", // 自前のタイトルバーでタイトルの前に出す Font Awesome のアイコン
   description: "フォルダ内（サブフォルダ含む）の Excel ファイルの「明細」シートを顧客ごとに集計します。",
+  // { group, fields } で見出しの下に項目をまとめる（値は 1 つのオブジェクトにまとまる）
   fields: [
-    { name: "src", label: "集計フォルダ", type: "folder", required: true, icon: "folder-open" },
-    { name: "out", label: "出力先", icon: "file-excel", type: "saveFile", accept: [".xlsx"], default: "集計結果.xlsx", required: true },
-    { name: "key", label: "集計単位", type: "radio", options: ["顧客名", "商品名"], default: "顧客名" },
-    { name: "from", label: "対象期間（開始）", type: "date", help: "空欄なら全期間" },
-    { name: "details", label: "明細シートも出力する", type: "checkbox", default: true },
+    {
+      group: "ファイル", icon: "folder-tree",
+      fields: [
+        { name: "src", label: "集計フォルダ", type: "folder", required: true, icon: "folder-open" },
+        { name: "out", label: "出力先", icon: "file-excel", type: "saveFile", accept: [".xlsx"], default: "集計結果.xlsx", required: true },
+      ],
+    },
+    {
+      group: "集計の条件", icon: "sliders",
+      fields: [
+        { name: "key", label: "集計単位", type: "radio", options: ["顧客名", "商品名"], default: "顧客名" },
+        { name: "from", label: "対象期間（開始）", type: "date", help: "空欄なら全期間" },
+        { name: "details", label: "明細シートも出力する", type: "checkbox", default: true },
+      ],
+    },
   ],
   submit: "集計",
   submitIcon: "play",

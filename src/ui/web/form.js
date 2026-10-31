@@ -66,7 +66,20 @@ function init(m) {
   box.textContent = "";
   controls.clear();
   const panels = buildTabs(m.tabs || [], m.tabIcons || []);
+  const parent = (tab) => (tab >= 0 && panels[tab] ? panels[tab] : box);
+  // Groups: a heading and a box for its fields, placed before the field at its index.
+  const groups = m.groups || [];
+  const groupBoxes = groups.map(() => null);
+  const startGroups = (i) => groups.forEach((g, k) => {
+    if (g.at !== i || groupBoxes[k]) return;
+    const sec = el("section", { className: "group" },
+      el("h2", { className: "group-head" }, ...withIcon(g.icon, g.label)));
+    if (g.help) sec.append(el("div", { className: "group-help", textContent: g.help }));
+    parent(g.tab).append(sec);
+    groupBoxes[k] = sec;
+  });
   fields.forEach((f, i) => {
+    startGroups(i);
     const id = "f" + i;
     const c = buildControl(f, id);
     const wide = f.type === "table" ? " wide" : "";
@@ -78,11 +91,12 @@ function init(m) {
     c.err = ctl.appendChild(el("div", { className: "err", hidden: true }));
     c.field = f;
     c.ctl = ctl;
-    (f.tab >= 0 && panels[f.tab] ? panels[f.tab] : box).append(label, ctl);
+    (f.group >= 0 && groupBoxes[f.group] ? groupBoxes[f.group] : parent(f.tab)).append(label, ctl);
     controls.set(f.name, c);
     watch(c);
     c.set(f.value);
   });
+  startGroups(fields.length);
   setState("input");
   if (tabButtons.length) showTab(0, false);
   const first = fields.find((f) => f.type !== "checkbox" && f.type !== "radio" && f.type !== "table" && !(f.tab > 0));

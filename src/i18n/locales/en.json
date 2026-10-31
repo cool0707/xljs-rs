@@ -191,6 +191,8 @@
     "form.dropFolder": "Drop a folder here",
     "form.selectRow": "Select a row",
     "form.noTable": "the form has no table field \"{0}\"",
+    "form.badGroup": "the fields of group \"{0}\" must be an array",
+    "form.nestedGroup": "group \"{0}\" cannot be inside another group",
     "form.badTab": "tab {0} must be an object like { label, fields }",
     "form.badButton": "ui.form: button {0} needs onClick",
     "form.noButton": "ui.form: no button \"{0}\"",
