@@ -2,6 +2,7 @@
 //! the prelude that builds the public objects (fs, path, csv, workbooks,
 //! pickers, ui, console, polyfills) on top of them.
 
+mod ad;
 mod app;
 mod csv;
 mod dayjs;
@@ -340,6 +341,7 @@ pub(crate) fn install_natives<'js>(ctx: &Ctx<'js>, host: &Rc<Host>) -> rquickjs:
     vba::install(&n);
     ui::install(&n);
     app::install(&n);
+    ad::install(&n);
     Ok(obj)
 }
 

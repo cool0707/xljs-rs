@@ -108,6 +108,18 @@ description: xljs（Excel・CSV・JSON を JavaScript で処理する Windows �
 | `shell.openPath(p)` | 既定のアプリで開く（.xlsx なら Excel、フォルダならエクスプローラー） |
 | `shell.openExternal(url)` | ブラウザで開く |
 
+### ad（Active Directory。ドメイン参加の Windows のみ）
+
+サインイン中のユーザーの権限で読むだけ。結果のキーは LDAP の属性名（`sAMAccountName` `displayName` `mail` `department` `title` `manager` `memberOf` `lastLogonTimestamp` `whenCreated` など）。日時は `Date`（無期限・なしは `null`）、`memberOf` は識別名の配列。`type`（"user" / "computer" / "group" ...）、`enabled` `lockedOut` `passwordExpired` も付く。
+
+| API | 説明 |
+|---|---|
+| `ad.available()` | ドメインに参加しているか |
+| `ad.me()` / `ad.computer()` | 自分 / このコンピューター |
+| `ad.get(id)` | 1 件（ログオン名・識別名・UPN・メール・SID・名前。なければ `null`） |
+| `ad.search("山田*")` | 名前・ログオン名・表示名・メールで検索（既定はユーザー） |
+| `ad.search({ type, filter, disabled, lockedOut, expired, expiringDays, inactiveDays, passwordExpired, passwordNeverExpires, memberOf, recursive, searchBase, properties, limit })` | 条件はすべて AND。`type`: "user"（既定）/ "computer" / "group" / "all"。`filter`: `{ department: "営業部", title: ["課長", "部長"], mail: true }` か LDAP のフィルタ文字列。`inactiveDays: 90` は 90 日ログオンなし。`memberOf` はグループ名か識別名 |
+
 ## Excel
 
 対応形式は `.xlsx` / `.xlsm`。`.xls` は不可。マクロ・ピボットテーブル・グラフは保存すると失われることがある。

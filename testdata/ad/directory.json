@@ -1,0 +1,175 @@
+{
+  "$comment": "The fake directory of the tests (src/ad/fake.rs). sid:, guid: and hex: are binary values.",
+  "rootDSE": {
+    "defaultNamingContext": "DC=corp,DC=example,DC=com",
+    "configurationNamingContext": "CN=Configuration,DC=corp,DC=example,DC=com",
+    "rootDomainNamingContext": "DC=corp,DC=example,DC=com",
+    "dnsHostName": "dc01.corp.example.com"
+  },
+  "self": {
+    "user": "CN=山田 太郎,OU=営業部,DC=corp,DC=example,DC=com",
+    "computer": "CN=PC001,OU=Computers,DC=corp,DC=example,DC=com"
+  },
+  "entries": [
+    {
+      "dn": "DC=corp,DC=example,DC=com",
+      "attrs": { "objectClass": ["top", "domain", "domainDNS"], "name": "corp" }
+    },
+    {
+      "dn": "CN=CORP,CN=Partitions,CN=Configuration,DC=corp,DC=example,DC=com",
+      "attrs": { "objectClass": ["top", "crossRef"], "nCName": "DC=corp,DC=example,DC=com", "nETBIOSName": "CORP" }
+    },
+    {
+      "dn": "OU=営業部,DC=corp,DC=example,DC=com",
+      "attrs": { "objectClass": ["top", "organizationalUnit"], "objectCategory": "organizationalUnit", "name": "営業部" }
+    },
+    {
+      "dn": "CN=山田 太郎,OU=営業部,DC=corp,DC=example,DC=com",
+      "attrs": {
+        "objectClass": ["top", "person", "organizationalPerson", "user"],
+        "objectCategory": "person",
+        "name": "山田 太郎",
+        "cn": "山田 太郎",
+        "sAMAccountName": "yamada",
+        "userPrincipalName": "yamada@corp.example.com",
+        "displayName": "山田 太郎",
+        "givenName": "太郎",
+        "sn": "山田",
+        "mail": "taro.yamada@example.com",
+        "department": "営業部",
+        "title": "課長",
+        "employeeID": "00123",
+        "objectSid": "sid:S-1-5-21-1-2-3-1105",
+        "objectGUID": "guid:3f2504e0-4f89-11d3-9a0c-0305e82c3301",
+        "memberOf": ["CN=営業部,OU=Groups,DC=corp,DC=example,DC=com"],
+        "tokenGroups": ["sid:S-1-5-21-1-2-3-513", "sid:S-1-5-21-1-2-3-2001"],
+        "userAccountControl": "512",
+        "msDS-User-Account-Control-Computed": "0",
+        "pwdLastSet": "133564032000000000",
+        "lastLogonTimestamp": "133564032000000000",
+        "accountExpires": "9223372036854775807",
+        "whenCreated": "20240401000000.0Z",
+        "whenChanged": "20240402010203.0Z"
+      }
+    },
+    {
+      "dn": "CN=鈴木 花子,OU=営業部,DC=corp,DC=example,DC=com",
+      "attrs": {
+        "objectClass": ["top", "person", "organizationalPerson", "user"],
+        "objectCategory": "person",
+        "name": "鈴木 花子",
+        "sAMAccountName": "suzuki",
+        "userPrincipalName": "suzuki@corp.example.com",
+        "displayName": "鈴木 花子",
+        "department": "営業部",
+        "memberOf": ["CN=営業部,OU=Groups,DC=corp,DC=example,DC=com"],
+        "userAccountControl": "512",
+        "msDS-User-Account-Control-Computed": "16",
+        "lockoutTime": "133564032000000000",
+        "accountExpires": "0",
+        "whenCreated": "20240401000000.0Z"
+      }
+    },
+    {
+      "dn": "CN=田中 一郎,CN=Users,DC=corp,DC=example,DC=com",
+      "attrs": {
+        "objectClass": ["top", "person", "organizationalPerson", "user"],
+        "objectCategory": "person",
+        "name": "田中 一郎",
+        "sAMAccountName": "tanaka",
+        "department": "開発部",
+        "userAccountControl": "66050",
+        "msDS-User-Account-Control-Computed": "0",
+        "accountExpires": "133000000000000000",
+        "whenCreated": "20200401000000.0Z"
+      }
+    },
+    {
+      "dn": "CN=佐藤 次郎,OU=総務部,DC=corp,DC=example,DC=com",
+      "attrs": {
+        "objectClass": ["top", "person", "organizationalPerson", "user"],
+        "objectCategory": "person",
+        "name": "佐藤 次郎",
+        "sAMAccountName": "sato",
+        "department": "総務部",
+        "manager": "CN=山田 太郎,OU=営業部,DC=corp,DC=example,DC=com",
+        "memberOf": ["CN=総務部,OU=Groups,DC=corp,DC=example,DC=com"],
+        "userAccountControl": "512",
+        "msDS-User-Account-Control-Computed": "8388608",
+        "lockoutTime": "133000000000000000",
+        "pwdLastSet": "133000000000000000",
+        "whenCreated": "20230401000000.0Z"
+      }
+    },
+    {
+      "dn": "CN=営業部,OU=Groups,DC=corp,DC=example,DC=com",
+      "attrs": {
+        "objectClass": ["top", "group"],
+        "objectCategory": "group",
+        "name": "営業部",
+        "sAMAccountName": "営業部",
+        "groupType": "-2147483646",
+        "member": ["CN=山田 太郎,OU=営業部,DC=corp,DC=example,DC=com", "CN=鈴木 花子,OU=営業部,DC=corp,DC=example,DC=com"],
+        "memberOf": ["CN=全社員,OU=Groups,DC=corp,DC=example,DC=com"],
+        "whenCreated": "20200401000000.0Z"
+      }
+    },
+    {
+      "dn": "CN=総務部,OU=Groups,DC=corp,DC=example,DC=com",
+      "attrs": {
+        "objectClass": ["top", "group"],
+        "objectCategory": "group",
+        "name": "総務部",
+        "sAMAccountName": "総務部",
+        "groupType": "-2147483646",
+        "member": ["CN=佐藤 次郎,OU=総務部,DC=corp,DC=example,DC=com"],
+        "memberOf": ["CN=全社員,OU=Groups,DC=corp,DC=example,DC=com"],
+        "whenCreated": "20200401000000.0Z"
+      }
+    },
+    {
+      "dn": "CN=全社員,OU=Groups,DC=corp,DC=example,DC=com",
+      "attrs": {
+        "objectClass": ["top", "group"],
+        "objectCategory": "group",
+        "name": "全社員",
+        "sAMAccountName": "全社員",
+        "mail": "all@example.com",
+        "groupType": "8",
+        "member": ["CN=営業部,OU=Groups,DC=corp,DC=example,DC=com", "CN=総務部,OU=Groups,DC=corp,DC=example,DC=com"],
+        "whenCreated": "20200401000000.0Z"
+      }
+    },
+    {
+      "dn": "CN=PC001,OU=Computers,DC=corp,DC=example,DC=com",
+      "attrs": {
+        "objectClass": ["top", "person", "organizationalPerson", "user", "computer"],
+        "objectCategory": "computer",
+        "name": "PC001",
+        "sAMAccountName": "PC001$",
+        "dNSHostName": "pc001.corp.example.com",
+        "operatingSystem": "Windows 11 Pro",
+        "operatingSystemVersion": "10.0 (22631)",
+        "userAccountControl": "4096",
+        "msDS-User-Account-Control-Computed": "0",
+        "lastLogonTimestamp": "133564032000000000",
+        "whenCreated": "20240401000000.0Z"
+      }
+    },
+    {
+      "dn": "CN=PC002,OU=Computers,DC=corp,DC=example,DC=com",
+      "attrs": {
+        "objectClass": ["top", "person", "organizationalPerson", "user", "computer"],
+        "objectCategory": "computer",
+        "name": "PC002",
+        "sAMAccountName": "PC002$",
+        "dNSHostName": "pc002.corp.example.com",
+        "operatingSystem": "Windows 10 Pro",
+        "userAccountControl": "4098",
+        "msDS-User-Account-Control-Computed": "0",
+        "lastLogonTimestamp": "130000000000000000",
+        "whenCreated": "20190401000000.0Z"
+      }
+    }
+  ]
+}
