@@ -22,6 +22,7 @@ HTML UI・フォーム・表表示・デバッガの設計は `docs/handoff-ui.m
 | `types/xljs.d.ts` | 公開 API の型定義（`xljs init` で出力）。API を変えたら必ず更新 |
 | `testdata/scripts/*.test.{js,ts}` | モック UI で実行される結合テスト（`src/engine/tests.rs`）。`<name>.answers.json` がモック応答 |
 | `examples/` | サンプル。`xljs init` の d.ts と jsconfig.json で tsc の型チェックが通る状態を保つ（CI の ubuntu で検査） |
+| `tools/gui/` | Windows 実機での GUI 自動操作・スクリーンショット（`XljsGui.psm1`、`smoke.ps1`、`stay-awake.ps1`）。`docs/gui-testing.md` 参照 |
 | `docs/ai/` | AI チャット向けのプロンプトとリファレンス。`ai_docs` テストがコードブロックの構文と長さを検査 |
 
 ## 規約
@@ -53,4 +54,5 @@ xljs --debug script.ts                                    # デバッグウィ�
 - GUI 版は既定のビルド（`windows_subsystem = "windows"`）、コンソール版（xljsc.exe）は `--features console`。アイコンとマニフェストは `build.rs` が `src/cli/xljs.rc` から埋め込む。
 - Linux で Windows 版のテストを流すなら: mingw-w64 と wine を入れて `LANG=C.UTF-8 CARGO_TARGET_X86_64_PC_WINDOWS_GNU_RUNNER=wine64 cargo test --target x86_64-pc-windows-gnu --lib`（ネイティブダイアログのテストは `xvfb-run` 付きで）。
 - CI（.github/workflows/ci.yml）: ubuntu と windows で `cargo test --lib`。Windows ではダイアログを実際に開いて閉じるテスト（`src/ui/native/tests.rs`）と WebView2 のウィンドウのテストも走る。タグ `v*` で Release に zip を添付。
+- **Windows 実機（`claude remote-control`）では GUI を自動操作・撮影して確認できる**: `cargo build` → `pwsh -File tools/gui/smoke.ps1 -MonitorOff`。ヘルパーは `tools/gui/XljsGui.psm1`（UI Automation＋ウィンドウメッセージ。入力は使わない）。手順・できること・はまりどころは `docs/gui-testing.md`。
 - 出力の見た目確認: LibreOffice があれば `soffice --headless --convert-to pdf` → `pdftoppm` で画像化できる。
