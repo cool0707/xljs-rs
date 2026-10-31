@@ -255,20 +255,81 @@ fn preset_path(prst: &str, w: f64, h: f64, adj: &HashMap<String, f64>) -> Option
         )
     };
     let ellipse = format!("M0,{cy} A{rx},{ry} 0 1 1 {w},{cy} A{rx},{ry} 0 1 1 0,{cy} Z", cy = n(h / 2.0), rx = n(w / 2.0), ry = n(h / 2.0), w = n(w));
-    let callout_tail = |base: &str| -> String {
-        // The tail: from two points on the edge nearest to its tip.
-        let (tx, ty) = (w / 2.0 + a("adj1", -20833.0) * w, h / 2.0 + a("adj2", 62500.0) * h);
-        let (dx, dy) = ((tx - w / 2.0) / w, (ty - h / 2.0) / h);
-        let tail = if dx.abs() * 1.0 > dy.abs() {
-            let ex = if dx > 0.0 { w } else { 0.0 };
-            [(ex, h * 7.0 / 12.0), (tx, ty), (ex, h * 5.0 / 12.0)]
+    // Callouts: one outline with the tail in it, so that no line crosses
+    // the tail's base. The tip is at adj1, adj2 from the center (of the size).
+    let tip = (w / 2.0 + a("adj1", -20833.0) * w, h / 2.0 + a("adj2", 62500.0) * h);
+    let box_callout = |r: f64| -> String {
+        let r = r.min(w / 2.0).min(h / 2.0);
+        let (dx, dy) = ((tip.0 - w / 2.0) / w, (tip.1 - h / 2.0) / h);
+        // The edge the tail leaves from (none when the tip is inside).
+        let edge = if dx.abs() <= 0.5 && dy.abs() <= 0.5 {
+            ' '
+        } else if dx.abs() > dy.abs() {
+            if dx > 0.0 { 'r' } else { 'l' }
+        } else if dy > 0.0 {
+            'b'
         } else {
-            let ey = if dy > 0.0 { h } else { 0.0 };
-            let x0 = if dx < 0.0 { w * 2.0 / 12.0 } else { w * 7.0 / 12.0 };
-            [(x0, ey), (tx, ty), (x0 + w / 4.0, ey)]
+            't'
         };
-        let tail = format!("M{},{} L{},{} L{},{}", n(tail[0].0), n(tail[0].1), n(tail[1].0), n(tail[1].1), n(tail[2].0), n(tail[2].1));
-        format!("{base} {tail} Z")
+        // The base of the tail on the edge: a quarter of it, on the tip's side.
+        let span = |len: f64, toward_end: bool| if toward_end { (len * 7.0 / 12.0, len * 10.0 / 12.0) } else { (len * 2.0 / 12.0, len * 5.0 / 12.0) };
+        let t = |e: char, p: f64, q: f64| -> String {
+            if e != edge {
+                return String::new();
+            }
+            let (a0, a1) = (p, q);
+            let pt = |u: f64| match e {
+                't' => (u, 0.0),
+                'r' => (w, u),
+                'b' => (u, h),
+                _ => (0.0, u),
+            };
+            let (b1, b2) = (pt(a0), pt(a1));
+            format!("L{},{} L{},{} L{},{} ", n(b1.0), n(b1.1), n(tip.0), n(tip.1), n(b2.0), n(b2.1))
+        };
+        let (tx0, tx1) = span(w, dx > 0.0);
+        let (ty0, ty1) = span(h, dy > 0.0);
+        let arc = |x: f64, y: f64| if r > 0.0 { format!("A{r},{r} 0 0 1 {},{} ", n(x), n(y), r = n(r)) } else { String::new() };
+        format!(
+            "M{},0 {}L{},0 {}{}L{},{} {}{}L{},{} {}{}L0,{} {}Z",
+            n(r),
+            t('t', tx0, tx1),
+            n(w - r),
+            arc(w, r),
+            t('r', ty0, ty1),
+            n(w),
+            n(h - r),
+            arc(w - r, h),
+            t('b', tx1, tx0),
+            n(r),
+            n(h),
+            arc(0.0, h - r),
+            t('l', ty1, ty0),
+            n(r),
+            arc(r, 0.0),
+        )
+    };
+    let ellipse_callout = || -> String {
+        let (rx, ry) = (w / 2.0, h / 2.0);
+        let (ux, uy) = ((tip.0 - rx) / rx.max(0.01), (tip.1 - ry) / ry.max(0.01));
+        if ux * ux + uy * uy <= 1.0 {
+            return ellipse.clone();
+        }
+        // The base: on the ellipse, either side of the direction of the tip.
+        let th = uy.atan2(ux);
+        let p = |a: f64| (rx + rx * a.cos(), ry + ry * a.sin());
+        let (b1, b2) = (p(th + 0.3), p(th - 0.3));
+        format!(
+            "M{},{} A{},{} 0 1 1 {},{} L{},{} Z",
+            n(b1.0),
+            n(b1.1),
+            n(rx),
+            n(ry),
+            n(b2.0),
+            n(b2.1),
+            n(tip.0),
+            n(tip.1)
+        )
     };
     let arrow = |dir: char| -> String {
         // Shaft thickness adj1 (of the cross size), head length adj2 (of the short side).
@@ -352,9 +413,10 @@ fn preset_path(prst: &str, w: f64, h: f64, adj: &HashMap<String, f64>) -> Option
             let (s0, s1) = ((w - th) / 2.0, (w + th) / 2.0);
             (pts(&[(w / 2.0, 0.0), (w, head), (s1, head), (s1, h - head), (w, h - head), (w / 2.0, h), (0.0, h - head), (s0, h - head), (s0, head), (0.0, head)]), false)
         }
-        "wedgeRectCallout" => (callout_tail(&format!("M0,0 L{w},0 L{w},{h} L0,{h} Z", w = n(w), h = n(h))), false),
-        "wedgeRoundRectCallout" => (callout_tail(&round_rect(ss * a("adj3", 16667.0))), false),
-        "wedgeEllipseCallout" | "cloudCallout" | "cloud" => (if prst == "cloud" { ellipse } else { callout_tail(&ellipse) }, false),
+        "wedgeRectCallout" => (box_callout(0.0), false),
+        "wedgeRoundRectCallout" => (box_callout(ss * a("adj3", 16667.0)), false),
+        "wedgeEllipseCallout" | "cloudCallout" => (ellipse_callout(), false),
+        "cloud" => (ellipse, false),
         "flowChartDocument" => (
             format!(
                 "M0,0 L{w},0 L{w},{y} C{c1},{y2} {c2},{y3} 0,{y} Z",
@@ -728,5 +790,11 @@ mod tests {
         adj.insert("adj".to_string(), 50000.0);
         assert!(preset_path("roundRect", 10.0, 4.0, &adj).unwrap().0.starts_with("M2,0 L8,0 A2,2"));
         assert!(preset_path("heart", 10.0, 10.0, &none).is_none());
+        // A callout is one outline: the tail (tip below left) is in the bottom edge.
+        let mut tail = HashMap::new();
+        tail.insert("adj1".to_string(), -25000.0);
+        tail.insert("adj2".to_string(), 100000.0);
+        assert_eq!(preset_path("wedgeRectCallout", 120.0, 60.0, &tail).unwrap().0, "M0,0 L120,0 L120,60 L50,60 L30,90 L20,60 L0,60 L0,0 Z");
+        assert_eq!(preset_path("wedgeRectCallout", 120.0, 60.0, &none).unwrap().0.matches('M').count(), 1);
     }
 }
