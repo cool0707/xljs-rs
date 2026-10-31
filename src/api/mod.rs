@@ -80,6 +80,8 @@ pub struct Host {
     values: RefCell<HashMap<u64, Persistent<Value<'static>>>>,
     natives: RefCell<Option<Persistent<Object<'static>>>>,
     rejections: RefCell<Vec<(Persistent<Value<'static>>, Persistent<Value<'static>>)>>,
+    /// State of the engine's own (the debugger session).
+    pub ext: RefCell<Option<Rc<dyn std::any::Any>>>,
 }
 
 impl Host {
@@ -101,6 +103,7 @@ impl Host {
             values: RefCell::new(HashMap::new()),
             natives: RefCell::new(None),
             rejections: RefCell::new(Vec::new()),
+            ext: RefCell::new(None),
         }
     }
 
@@ -152,6 +155,7 @@ impl Host {
         self.rejections.borrow_mut().clear();
         *self.lp.after.borrow_mut() = None;
         self.exit_hook.borrow_mut().take();
+        self.ext.borrow_mut().take();
     }
 
     /// Keeps a function for a later callback (posted from another thread).
