@@ -15,7 +15,7 @@ use umya_spreadsheet::structs::drawing::Theme;
 use umya_spreadsheet::{Cell, CellRawValue, Color, Style, Worksheet};
 
 use super::xlsx::{Book, format_code, from_serial, style_is_date};
-use super::xlsx_chart::{Anchor, chart_anchors, parse, resolve};
+use super::xlsx_chart::{Anchor, parse, resolve};
 use crate::{Result, err};
 
 /// EMU per point.
@@ -184,7 +184,7 @@ pub fn paper_code(name: &str) -> Option<u32> {
     })
 }
 
-fn esc(s: &str) -> String {
+pub(super) fn esc(s: &str) -> String {
     let mut o = String::with_capacity(s.len());
     for c in s.chars() {
         match c {
@@ -199,7 +199,7 @@ fn esc(s: &str) -> String {
 }
 
 /// A number for CSS (at most 3 decimals).
-fn n(v: f64) -> String {
+pub(super) fn n(v: f64) -> String {
     let s = format!("{:.3}", v);
     let s = s.trim_end_matches('0').trim_end_matches('.');
     if s == "-0" { "0".into() } else { s.to_string() }
@@ -220,7 +220,7 @@ fn css_color(c: &Color, theme: &Theme) -> Option<String> {
 
 /// A font-family list for an Excel font name (Japanese names also by their
 /// English names, which every Windows knows).
-fn font_family(name: &str) -> String {
+pub(super) fn font_family(name: &str) -> String {
     let alias = match name {
         "游ゴシック" => "Yu Gothic",
         "游ゴシック Light" => "Yu Gothic Light",
@@ -914,6 +914,8 @@ body{-webkit-print-color-adjust:exact;print-color-adjust:exact}
 .xljs-objs>*{position:absolute}
 .xljs-objs img{display:block}
 .xljs-print-chart{overflow:hidden}
+.xljs-shape{position:absolute;box-sizing:border-box}
+.xljs-shape p{margin:0}
 .xljs-print-chart .xljs-chart-error{display:flex;align-items:center;justify-content:center;height:100%;border:0.75pt dashed #999;color:#666;font-size:9pt;box-sizing:border-box;padding:4pt;text-align:center}
 @media screen{
 body{background:#e6e6e6;padding:12px 0}
@@ -944,43 +946,59 @@ pub fn workbook_html(b: &Book, o: &PrintOptions) -> Result<PrintOut> {
     let mut body = String::new();
     let mut charts = Vec::new();
     let mut pages = 0;
+    let ids = std::cell::Cell::new(0);
     for (si, name) in names.iter().enumerate() {
         let sh = Sheet::new(b, name)?;
         let setup = setup_of(&sh, b.print.get(name), o)?;
-        let anchors = if o.charts == Some(false) { Vec::new() } else { chart_anchors(b, name) };
-        let mut objects: Vec<(Anchor, String)> = Vec::new();
-        for (i, an) in anchors.iter().enumerate() {
-            let k = charts.len();
-            charts.push(ChartRef { sheet: name.clone(), index: i });
-            objects.push((an.clone(), format!("<div class=\"xljs-print-chart\" data-chart=\"{k}\"")));
-        }
-        for img in sh.ws.image_collection() {
-            if !img.has_image() {
-                continue;
+        // The drawing's objects as (anchor, opening tag, content), later ones on top.
+        let mut objects: Vec<(Anchor, String, String)> = Vec::new();
+        match super::xlsx_shape::sheet_drawing(b, name, &ids, &|an| sh.anchor_rect(an).map(|r| (r.2, r.3))) {
+            Some(drawn) => {
+                for d in drawn {
+                    match d.drawn {
+                        super::xlsx_shape::Drawn::Chart(i) => {
+                            if o.charts == Some(false) {
+                                continue;
+                            }
+                            let k = charts.len();
+                            charts.push(ChartRef { sheet: name.clone(), index: i });
+                            objects.push((d.anchor, format!("<div class=\"xljs-print-chart\" data-chart=\"{k}\""), String::new()));
+                        }
+                        super::xlsx_shape::Drawn::Html(h) => objects.push((d.anchor, "<div class=\"xljs-print-shape\"".into(), h)),
+                    }
+                }
             }
-            let m = |mk: &umya_spreadsheet::structs::drawing::spreadsheet::MarkerType| (mk.col(), mk.col_off() as i64, mk.row(), mk.row_off() as i64);
-            let mut an = Anchor { from: Some(m(img.from_marker_type())), ..Default::default() };
-            if let Some(t) = img.to_marker_type() {
-                an.to = Some(m(t));
-            } else if let Some(one) = img.one_cell_anchor() {
-                an.ext = Some((one.extent().cx(), one.extent().cy()));
+            // A new workbook: the pictures umya-spreadsheet keeps, if any.
+            None => {
+                for img in sh.ws.image_collection() {
+                    if !img.has_image() {
+                        continue;
+                    }
+                    let m = |mk: &umya_spreadsheet::structs::drawing::spreadsheet::MarkerType| (mk.col(), mk.col_off() as i64, mk.row(), mk.row_off() as i64);
+                    let mut an = Anchor { from: Some(m(img.from_marker_type())), ..Default::default() };
+                    if let Some(t) = img.to_marker_type() {
+                        an.to = Some(m(t));
+                    } else if let Some(one) = img.one_cell_anchor() {
+                        an.ext = Some((one.extent().cx(), one.extent().cy()));
+                    }
+                    let lower = img.image_name().to_lowercase();
+                    let mime = if lower.ends_with(".png") {
+                        "image/png"
+                    } else if lower.ends_with(".gif") {
+                        "image/gif"
+                    } else if lower.ends_with(".bmp") {
+                        "image/bmp"
+                    } else if lower.ends_with(".svg") {
+                        "image/svg+xml"
+                    } else {
+                        "image/jpeg"
+                    };
+                    let data = base64::engine::general_purpose::STANDARD.encode(img.image_data());
+                    objects.push((an, format!("<img alt=\"\" src=\"data:{mime};base64,{data}\""), String::new()));
+                }
             }
-            let lower = img.image_name().to_lowercase();
-            let mime = if lower.ends_with(".png") {
-                "image/png"
-            } else if lower.ends_with(".gif") {
-                "image/gif"
-            } else if lower.ends_with(".bmp") {
-                "image/bmp"
-            } else if lower.ends_with(".svg") {
-                "image/svg+xml"
-            } else {
-                "image/jpeg"
-            };
-            let data = base64::engine::general_purpose::STANDARD.encode(img.image_data());
-            objects.push((an, format!("<img alt=\"\" src=\"data:{mime};base64,{data}\"")));
         }
-        let all_anchors: Vec<Anchor> = objects.iter().map(|(a, _)| a.clone()).collect();
+        let all_anchors: Vec<Anchor> = objects.iter().map(|(a, _, _)| a.clone()).collect();
         let areas = sh.areas(&all_anchors);
         if areas.is_empty() {
             continue;
@@ -1087,7 +1105,7 @@ fn page_rule(name: &str, sh: &Sheet, s: &Setup, file: &str, dir: &str, now: &(St
 }
 
 /// Writes the pages of one area of a sheet; returns how many.
-fn sheet_pages(sh: &Sheet, s: &Setup, area: Area, objects: &[(Anchor, String)], page: &str, classes: &mut Classes, out: &mut String) -> usize {
+fn sheet_pages(sh: &Sheet, s: &Setup, area: Area, objects: &[(Anchor, String, String)], page: &str, classes: &mut Classes, out: &mut String) -> usize {
     let (c1, r1, c2, r2) = area;
     let (title_rows, title_cols) = sh.titles();
     let sum = |a: u32, b: u32, f: &dyn Fn(u32) -> f64| (a..=b).map(f).sum::<f64>();
@@ -1161,18 +1179,22 @@ fn sheet_pages(sh: &Sheet, s: &Setup, area: Area, objects: &[(Anchor, String)], 
         rows.extend((rs.0..=rs.1).filter(|r| sh.h(*r) > 0.0));
         let _ = write!(out, "<section class=\"xljs-page\" style=\"{style}\">\n<div class=\"xljs-sheet{}\" style=\"zoom:{}\">", if s.grid { " grid" } else { "" }, n(scale));
         page_table(sh, &cols, &rows, classes, out);
-        // Pictures and charts, cut to the body of the page.
+        // Pictures, shapes and charts, cut to the body of the page.
         let (bx0, by0) = (sh.x0(cs.0 - 1), sh.y0(rs.0 - 1));
         let (bw, bh) = (sh.x0(cs.1) - bx0, sh.y0(rs.1) - by0);
         let mut objs = String::new();
-        for (an, tag) in objects {
+        for (an, tag, inner) in objects {
             let Some((x, y, w, h)) = sh.anchor_rect(an) else { continue };
             let (x, y) = (x - bx0, y - by0);
             if x >= bw || y >= bh || x + w <= 0.0 || y + h <= 0.0 {
                 continue;
             }
             let _ = write!(objs, "{tag} style=\"left:{}pt;top:{}pt;width:{}pt;height:{}pt\"", n(x), n(y), n(w), n(h));
-            objs.push_str(if tag.starts_with("<img") { ">" } else { "></div>" });
+            if tag.starts_with("<img") {
+                objs.push('>');
+            } else {
+                let _ = write!(objs, ">{inner}</div>");
+            }
         }
         if !objs.is_empty() {
             let _ = write!(out, "<div class=\"xljs-objs\" style=\"left:{}pt;top:{}pt;width:{}pt;height:{}pt\">{objs}</div>", n(body_x), n(body_y), n(bw), n(bh));

@@ -80,6 +80,19 @@ ok(ph.includes("<img") && ph.includes('data-chart="0"'), "picture and chart");
 ok(!/>J\d/.test(ph), "hidden column");
 equal(pages(pb.sheet("一覧").toHtml({ scale: 100 })) > 3, true, "options win over the sheet's fit to page");
 await pb.toPdf("print.pdf");
+
+// Shapes, text boxes, lines, groups and a freeform (testdata/xlsx/make_shapes.py).
+const sh = workbooks.open(path.join(xljs.scriptDir, "..", "xlsx", "shapes.xlsx")).sheets[0].toHtml();
+for (const t of ["テキストボックスの文字", "太字で赤", "角丸", "楕円", "ここに注意", "四角", "ひし形", "縦書きの文字"]) ok(sh.includes(`>${t}<`), t);
+ok(!sh.includes("見えない") && !sh.includes(">印刷しない<"), "hidden shapes and shapes not printed");
+equal(sh.match(/class="xljs-print-shape"/g).length, 11, "top-level objects");
+ok(sh.includes('fill="#70AD47"'), "own fill");
+ok(sh.includes('fill="#4F81BD"'), "theme fill by style (accent1 of the workbook's theme, Office 2007 in openpyxl)");
+ok(sh.includes("marker-end=") && sh.includes("marker-start="), "arrowheads");
+ok(sh.includes('stroke-dasharray="4 3"'), "dashed line");
+ok(sh.includes("writing-mode:vertical-rl"), "vertical text");
+ok(sh.includes("transform:rotate(20deg)"), "rotation");
+ok(/<path d="M[^"]*C[^"]*" fill="none"/.test(sh), "freeform");
 await xljs.htmlToPdf("<h1>こんにちは</h1>", "hello.pdf", { paper: "A5", landscape: true });
 throws(() => xljs.htmlToPdf(1, "x.pdf"), /HTML は文字列/);
 console.log("pdf ok");

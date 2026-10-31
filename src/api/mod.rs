@@ -17,6 +17,7 @@ mod vba;
 mod xlsx;
 mod xlsx_chart;
 mod xlsx_print;
+mod xlsx_shape;
 mod xlsx_style;
 
 use std::cell::{Cell, RefCell};

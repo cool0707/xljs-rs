@@ -18,18 +18,19 @@ use umya_spreadsheet::CellRawValue;
 
 use super::xlsx::{Book, date_format_code, format_code, from_serial, parse_ref, style_is_date};
 
-/// The parts of an xlsx file that describe its charts (and how sheets
-/// reach them). Empty when the file has no charts.
+/// The parts of an xlsx file that describe its drawings (charts, shapes,
+/// pictures) and how sheets reach them. Empty when the file has no drawings.
 #[derive(Default, Debug, Clone)]
 pub struct ChartParts {
-    files: HashMap<String, Vec<u8>>,
+    pub(super) files: HashMap<String, Vec<u8>>,
 }
 
 impl ChartParts {
     pub fn collect(data: &[u8]) -> ChartParts {
         let mut files = HashMap::new();
         let Ok(mut zr) = zip::ZipArchive::new(Cursor::new(data)) else { return ChartParts { files } };
-        if !zr.file_names().any(|n| n.starts_with("xl/charts/")) {
+        // Charts, shapes and pictures all live in drawings.
+        if !zr.file_names().any(|n| n.starts_with("xl/drawings/")) {
             return ChartParts { files };
         }
         for i in 0..zr.len() {
@@ -40,6 +41,7 @@ impl ChartParts {
                 || name.starts_with("xl/worksheets/_rels/")
                 || name.starts_with("xl/drawings/")
                 || name.starts_with("xl/charts/")
+                || name.starts_with("xl/media/")
                 || name.starts_with("xl/theme/");
             let mut b = Vec::new();
             if keep && f.read_to_end(&mut b).is_ok() {
@@ -49,12 +51,12 @@ impl ChartParts {
         ChartParts { files }
     }
 
-    fn xml(&self, part: &str) -> Option<Node> {
+    pub(super) fn xml(&self, part: &str) -> Option<Node> {
         parse(self.files.get(part)?)
     }
 
     /// The relationships of a part: id -> (type, part it points to).
-    fn rels(&self, part: &str) -> HashMap<String, (String, String)> {
+    pub(super) fn rels(&self, part: &str) -> HashMap<String, (String, String)> {
         let (dir, file) = part.rsplit_once('/').unwrap_or(("", part));
         let mut out = HashMap::new();
         let Some(root) = self.xml(&format!("{dir}/_rels/{file}.rels")) else { return out };
@@ -69,7 +71,7 @@ impl ChartParts {
     }
 
     /// The part of the worksheet named sheet.
-    fn sheet_part(&self, sheet: &str) -> Option<String> {
+    pub(super) fn sheet_part(&self, sheet: &str) -> Option<String> {
         let wb = self.xml("xl/workbook.xml")?;
         let s = wb.child("sheets")?.all("sheet").find(|s| s.attr("name") == Some(sheet))?;
         let id = s.attr("id")?;
@@ -77,7 +79,7 @@ impl ChartParts {
     }
 
     /// The theme's colors by name (accent1, dk1, ...) as RRGGBB.
-    fn theme(&self) -> HashMap<String, String> {
+    pub(super) fn theme(&self) -> HashMap<String, String> {
         let mut out = HashMap::new();
         let Some(t) = self.xml("xl/theme/theme1.xml") else { return out };
         if let Some(cs) = t.find("clrScheme") {
@@ -138,7 +140,7 @@ impl Node {
     fn flag(&self, name: &str) -> Option<bool> {
         self.child(name).map(|c| !matches!(c.attr("val"), Some("0" | "false")))
     }
-    fn path(&self, names: &[&str]) -> Option<&Node> {
+    pub fn path(&self, names: &[&str]) -> Option<&Node> {
         names.iter().try_fold(self, |n, name| n.child(name))
     }
     /// The first descendant (or self) named name.
@@ -436,6 +438,17 @@ fn base_color(c: &Node, theme: &HashMap<String, String>) -> Option<String> {
     Some(match c.name.as_str() {
         "srgbClr" => c.attr("val")?.to_uppercase(),
         "sysClr" => c.attr("lastClr")?.to_uppercase(),
+        "prstClr" => match c.attr("val")? {
+            "black" => "000000",
+            "white" => "FFFFFF",
+            "red" => "FF0000",
+            "green" => "008000",
+            "blue" => "0000FF",
+            "yellow" => "FFFF00",
+            "gray" | "grey" => "808080",
+            _ => return None,
+        }
+        .to_string(),
         "schemeClr" => {
             let name = match c.attr("val")? {
                 "tx1" => "dk1",
@@ -525,7 +538,7 @@ fn from_hsl(h: f64, s: f64, l: f64) -> (f64, f64, f64) {
 }
 
 /// A color of a fill (a:solidFill and the like) as "#RRGGBB".
-fn color_of(fill: &Node, theme: &HashMap<String, String>) -> Option<String> {
+pub(super) fn color_of(fill: &Node, theme: &HashMap<String, String>) -> Option<String> {
     let c = fill.children.iter().find(|c| matches!(c.name.as_str(), "srgbClr" | "schemeClr" | "sysClr" | "prstClr"))?;
     modified(&base_color(c, theme)?, &mods_of(c))
 }
@@ -818,14 +831,6 @@ pub(super) fn anchor_of(a: &Node) -> Anchor {
     Anchor { from: marker("from"), to: marker("to"), ext: pair("ext", "cx", "cy"), pos: pair("pos", "x", "y") }
 }
 
-/// The anchors of the charts on a sheet, in the order of sheet_charts.
-pub fn chart_anchors(b: &Book, sheet: &str) -> Vec<Anchor> {
-    let mut out = Vec::new();
-    if let Some(parts) = &b.charts {
-        each_chart(parts, sheet, |anchor, _, _, _| out.push(anchor_of(anchor)));
-    }
-    out
-}
 
 #[cfg(test)]
 mod tests {

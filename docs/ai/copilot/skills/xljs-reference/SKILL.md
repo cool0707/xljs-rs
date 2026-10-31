@@ -202,7 +202,7 @@ await xljs.htmlToPdf("<h1>報告書</h1><p>本文</p>", "報告書.pdf", { paper
 
 - ブックのページ設定に従う: 用紙・向き・余白・拡大縮小と「次のページ数に合わせて印刷」・印刷範囲・印刷タイトル・改ページ・ページの順序・ヘッダー/フッター（`&P` `&N` `&D` `&A` `&F` など）・左右中央。
 - `options` で上書きできる: `paper`（`"A3"` `"A4"` `"B5"` `"Letter"` など）`landscape` `scale`（%）`fitToWidth` `fitToHeight` `fitToPage` `margin`（mm）`gridLines` `centerHorizontally` `charts: false` `sheets`。
-- 値・表示形式・フォント・塗り・罫線・結合・折り返し・回転・画像・グラフ（`sheet.charts` で描けるもの）を描く。条件付き書式・図形・テキストボックス・Excel 2016 以降のグラフは描かない。自動の改ページの位置は Excel と少し違うことがある。
+- 値・表示形式・フォント・塗り・罫線・結合・折り返し・回転・画像・図形とテキストボックス（よく使う形。ほかの形は四角になる）・線と矢印・グラフ（`sheet.charts` で描けるもの）を描く。条件付き書式・SmartArt・Excel 2016 以降のグラフは描かない。自動の改ページの位置は Excel と少し違うことがある。
 - `toHtml(options?)` は同じページを HTML の文字列で返す（グラフは空の枠）。
 
 ## CSV

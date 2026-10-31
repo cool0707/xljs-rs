@@ -86,7 +86,25 @@ await xljs.htmlToPdf("<h1>報告書</h1>", "報告書.pdf", { paper: "A4" }); //
   横・縦の配置、折り返し、インデント、回転（縦書きは `writing-mode`）、リッチテキスト（ランごとの `<span>`）。
 - 数式で値の保存がないセル（スクリプトで書いた数式）は `xlsx_calc` で計算する。
 - 結合セルはページの中で `colspan` / `rowspan`。ページの境目をまたぐ結合はページごとに切る。
-- 画像・グラフはアンカー（two-cell / one-cell / absolute）からシート上の位置を求め、重なるすべてのページに置いて本体の範囲で切る（ページをまたぐ図は分かれて出る）。
+- 画像・図形・グラフはアンカー（two-cell / one-cell / absolute）からシート上の位置を求め、重なるすべてのページに置いて本体の範囲で切る（ページをまたぐ図は分かれて出る）。
+  重なり順は描画（drawing）の順。
+
+### 図形・テキストボックス・画像（`src/api/xlsx_shape.rs`）
+
+ブックを開いたときに描画の部品（`xl/drawings/*`、`xl/media/*`、テーマ。`ChartParts`）を保持しておき、描画の XML を順に読む。
+umya-spreadsheet の図形のモデルは一部しか持たないので使わない（新しいブックは描画の部品がないので、umya の画像だけを置く）。
+
+| 要素 | 描き方 |
+|---|---|
+| 図形（`sp`）の形 | SVG の path。アンカーの実寸（pt）を viewBox にする。よく使う既定の形だけを手で書いている: 四角・角丸四角・楕円・三角・直角三角・ひし形・平行四辺形・台形・五角形（ホームベース）・山形・六角形・八角形・十字・星 5・上下左右の矢印・左右/上下両方向矢印・吹き出し（四角・角丸・楕円）・かっこ・中かっこ・額縁・円柱・フローチャートの主な記号。調整値（`avLst` の `adj`）も使う。知らない形は四角 |
+| フリーフォーム（`custGeom`） | `pathLst` の `moveTo` `lnTo` `cubicBezTo` `quadBezTo` `close`（`arcTo` は使わない） |
+| 線・コネクタ（`cxnSp`） | 直線・カギ線（`bentConnector2`〜`5`、中間の調整値）・曲線。矢じり（`headEnd` / `tailEnd` の triangle・stealth・arrow・oval・diamond、大きさ sm/med/lg）は SVG の marker。破線（`prstDash`） |
+| 塗り・線 | `spPr` の `solidFill`（グラデーションは最初の色）・`noFill`・`alpha`、`ln` の幅・色。指定がなければ図形のスタイル（`fillRef` / `lnRef` のテーマの色。線の幅は idx から 0.5/1/1.5pt） |
+| 文字（`txBody`） | 段落ごとの揃え、ランの大きさ・太字・斜体・下線・取り消し線・色・フォント（`ea` / `latin`。`+mn-ea` などはブックの既定のフォント）、改行、箇条書きの文字。`bodyPr` の内側の余白・上下の位置・折り返しなし・縦書き。色の既定は `fontRef` |
+| 回転・反転 | 回転は外側の `div` の `transform`（文字も一緒に回る）、反転は SVG の形だけ |
+| グループ（`grpSp`） | 子の位置を子の座標（`chOff` / `chExt`）からグループの枠の割合にして置く（入れ子も） |
+| 画像（`pic`） | `blip` の画像を data URL で（PNG・JPEG・GIF・BMP・SVG。EMF/WMF は描けないので出さない） |
+| 印刷しないもの | 非表示（`cNvPr hidden`）と「オブジェクトを印刷する」をオフにしたもの（`clientData fPrintsWithSheet="0"`） |
 - 画面で開いたとき（`@media screen`）はページを灰色の背景の上に用紙の大きさで並べる（`toHtml` の確認用）。
 
 ## 3. PDF にする（`Ui::print_pdf`、`src/ui/native/webview.rs`、`src/ui/web/print.html` / `print-page.js`）
@@ -107,7 +125,8 @@ await xljs.htmlToPdf("<h1>報告書</h1>", "報告書.pdf", { paper: "A4" }); //
 
 ## 4. できないこと・違い
 
-- 条件付き書式、図形・テキストボックス・ワードアート、SmartArt、コメント、ヘッダー/フッターの画像、先頭ページ・偶数ページ用のヘッダー。
+- 条件付き書式、SmartArt、ワードアートの効果、図形の影・3-D・グラデーション（最初の色で塗る）・パターン、よく使うもの以外の既定の図形の形（四角になる）、
+  画像のトリミング、EMF/WMF の画像、コメント、フォームのコントロール、ヘッダー/フッターの画像、先頭ページ・偶数ページ用のヘッダー。
 - 縮小して全体を表示（shrink to fit）、`#####` の表示（数値が入りきらない）、塗りのパターン（単色以外は前景色で塗る）、グラデーションの塗り。
 - 先頭ページ番号（`firstPageNumber`）、行列番号の印刷、白黒印刷・簡易印刷、印刷の品質。
 - Excel 2016 以降のグラフ（chartEx）やレーダーなど `sheet.charts` で描けないもの（枠の中に理由を書く）。
@@ -115,10 +134,13 @@ await xljs.htmlToPdf("<h1>報告書</h1>", "報告書.pdf", { paper: "A4" }); //
 
 ## 5. テスト
 
+- `src/api/xlsx_shape.rs` の単体テスト: 既定の形の path。
 - `src/api/xlsx_print.rs` の単体テスト: 範囲の読み方、ページの分け方（印刷タイトル・改ページ・非表示）、ヘッダー/フッター、表示形式の色、ページ設定の XML。
 - `testdata/scripts/pdf.test.js`（mock）: 新しいブックの HTML（値・結合・罫線・塗り・負数の赤）、オプション、検査、複数シート、
   `charts.xlsx` のグラフの枠、`testdata/xlsx/print.xlsx`（`make_print.py` で openpyxl から生成。横向き・横 1 ページ・印刷タイトル・
-  ヘッダー/フッター・改ページ・画像・グラフ・非表示の列とシート・印刷範囲・B5）、mock のログ。デバッガ経由でも同じ（`scripts_in_debugger`）。
+  ヘッダー/フッター・改ページ・画像・グラフ・非表示の列とシート・印刷範囲・B5）、`testdata/xlsx/shapes.xlsx`（`make_shapes.py`。openpyxl の
+  出力に描画の XML を足す: テキストボックス・既定のスタイルの図形・吹き出し・矢印・星（回転）・矢印付きの線・破線のカギ線コネクタ（反転）・グループ・
+  フリーフォーム・縦書き・非表示・印刷しない図形）、mock のログ。デバッガ経由でも同じ（`scripts_in_debugger`）。
 - `src/ui/native/tests.rs`（Windows CI）: `print_page_draws_charts_hidden`（見えないウィンドウで縦棒とガントが描けること）、
   `print_pdf_writes_a_file`（`print.xlsx` を PDF にしてファイルができること）。
 - 見た目は Playwright の Chromium で `print.html` に偽の `chrome.webview` を付けて `init` を送り、`page.pdf({ preferCSSPageSize: true })` →
