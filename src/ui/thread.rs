@@ -121,7 +121,10 @@ pub(crate) fn call<T: Send + 'static>(t: &Arc<dyn UiThread>, f: impl FnOnce() ->
     t.post(Box::new(move || {
         let _ = tx.send(f());
     }));
-    rx.recv().expect("the UI thread stopped")
+    let v = rx.recv().expect("the UI thread stopped");
+    // The script waited for the UI: it is not stuck in a loop.
+    crate::engine::watchdog::waited();
+    v
 }
 
 /// Forwards UI calls to the UI thread.

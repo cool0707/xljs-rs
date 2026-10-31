@@ -126,6 +126,10 @@ impl Loop {
                 (std::mem::take(&mut st.posted), st.pending)
             };
             let had_posted = !posted.is_empty();
+            if had_posted {
+                // Something came from the UI: the script is responding.
+                super::watchdog::waited();
+            }
             for f in posted {
                 f(ctx, host)?;
                 drain_jobs(ctx);
@@ -144,16 +148,20 @@ impl Loop {
                     return Ok(());
                 }
                 self.wait(None);
+                super::watchdog::waited();
                 continue;
             };
             let now = Instant::now();
             if when > now {
-                if pending > 0 {
-                    if self.wait(Some(when - now)) {
-                        continue;
-                    }
+                let woken = if pending > 0 {
+                    self.wait(Some(when - now))
                 } else {
                     std::thread::sleep(when - now);
+                    false
+                };
+                super::watchdog::waited();
+                if woken {
+                    continue;
                 }
             }
             let (func, args) = {

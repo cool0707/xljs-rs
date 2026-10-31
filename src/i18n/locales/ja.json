@@ -9,7 +9,7 @@
     "font": "游ゴシック"
   },
   "messages": {
-    "cli.usage": "xljs - Excel/CSV スクリプトランナー\n\n使い方:\n  xljs [オプション] <script.js|script.ts> [引数...]\n  xljs pack <script> [-o 出力.exe]   スクリプトを埋め込んだ exe を作成\n  xljs check <script>                構文と import を検査（実行しない）\n  xljs init [フォルダ]               型定義 (xljs.d.ts) と jsconfig.json を作成\n  xljs vba <book.xlsm>... [-o 出力.txt]  マクロブックの VBA コードを 1 つのテキストにまとめる\n  xljs version                       バージョンを表示\n\nオプション:\n  --ui=auto|native|console|mock      UI の種類（既定: auto）\n  --ui-answers=<file.json>           mock UI の応答ファイル\n  --lang=auto|{0}                  メッセージの言語（既定: システムの言語）\n  --debug[=script|window]            デバッグ。script = デバッグウィンドウでスクリプトを実行\n                                     （WebView2 の開発者ツールでブレークポイント・ステップ実行）\n                                     window = 画面の開発者ツール（F12）だけを有効にする\n\n環境変数 XLJS_UI / XLJS_UI_ANSWERS / XLJS_LANG / XLJS_DEBUG でも指定できます（埋め込み exe 向け）。\n",
+    "cli.usage": "xljs - Excel/CSV スクリプトランナー\n\n使い方:\n  xljs [オプション] <script.js|script.ts> [引数...]\n  xljs pack <script> [-o 出力.exe]   スクリプトを埋め込んだ exe を作成\n  xljs check <script>                構文と import を検査（実行しない）\n  xljs init [フォルダ]               型定義 (xljs.d.ts) と jsconfig.json を作成\n  xljs vba <book.xlsm>... [-o 出力.txt]  マクロブックの VBA コードを 1 つのテキストにまとめる\n  xljs version                       バージョンを表示\n\nオプション:\n  --ui=auto|native|console|mock      UI の種類（既定: auto）\n  --ui-answers=<file.json>           mock UI の応答ファイル\n  --lang=auto|{0}                  メッセージの言語（既定: システムの言語）\n  --debug[=script|window]            デバッグ。script = デバッグウィンドウでスクリプトを実行\n                                     （WebView2 の開発者ツールでブレークポイント・ステップ実行）\n                                     window = 画面の開発者ツール（F12）だけを有効にする\n  --watchdog=<秒>|on|off             応答しないまま指定の秒数を過ぎたスクリプトを中止するか尋ねる\n                                     （無限ループ対策。既定: ネイティブ UI では 15 秒、それ以外は off）\n\n環境変数 XLJS_UI / XLJS_UI_ANSWERS / XLJS_LANG / XLJS_DEBUG / XLJS_WATCHDOG でも指定できます（埋め込み exe 向け）。\n",
     "cli.usageCheck": "使い方: xljs check <script>",
     "cli.usagePack": "使い方: xljs pack <script> [-o 出力.exe]",
     "cli.interrupted": "中断しました",
@@ -19,6 +19,7 @@
     "cli.unknownUI": "--ui の値 \"{0}\" は使えません（auto, native, console, mock）",
     "cli.unknownDebug": "--debug の値 \"{0}\" は使えません（script, window, off）",
     "cli.debugNeedsWindows": "--debug にはネイティブ UI と WebView2 が必要です。代わりに --debug=window として通常どおり実行します",
+    "cli.unknownWatchdog": "--watchdog の値 \"{0}\" は使えません（秒数, on, off）",
     "cli.unknownLang": "--lang の値 \"{0}\" は使えません（使える言語: {1}）",
     "cli.checkOK": "問題ありません",
     "cli.created": "作成しました: {0}",
@@ -31,6 +32,8 @@
     "engine.bundleNotFunction": "内部エラー: バンドル結果が関数ではありません",
     "engine.notFinished": "スクリプトが完了しませんでした（解決されない Promise を await しています）",
     "engine.unhandledRejection": "処理されなかった Promise の reject: {0}",
+    "engine.stopped": "スクリプトを中止しました",
+    "engine.stuckConfirm": "スクリプトが {0} 秒以上応答していません。無限ループになっている可能性があります。\n\nスクリプトを中止しますか？\n（OK: 中止 / キャンセル: 続ける）",
     "debug.windowTitle": "デバッグ - {0}",
     "debug.hint": "開発者ツールで Ctrl+P からスクリプトのファイルを開いてブレークポイントを設定し、［実行］を押してください。開発者ツールは F12 でも開けます。",
     "debug.breakFirst": "実行の直前で一時停止する",

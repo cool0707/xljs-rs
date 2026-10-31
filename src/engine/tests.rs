@@ -541,3 +541,67 @@ fn ai_docs() {
 }
 
 mod pages;
+
+/// Runs src with the watchdog at limit and the confirm answers (on a
+/// script thread of ui::run, like the CLI).
+fn run_watched(src: &str, confirm: &str, limit: Duration) -> Res {
+    let (o, e) = (SharedBuf::default(), SharedBuf::default());
+    let m = Mock::from_json(&format!(r#"{{"confirm": {confirm}}}"#), Some(e.sink())).unwrap();
+    let mut opts = Options {
+        script_path: write_script("loop.js", src),
+        stdout: Some(out(&o)),
+        stderr: Some(out(&e)),
+        watchdog: Some(limit),
+        ..Default::default()
+    };
+    let r = crate::ui::run(Arc::new(m), move |su| {
+        opts.ui = Some(su);
+        run(opts)
+    });
+    let (code, err) = match r {
+        Ok(c) => (c, None),
+        Err(e) => (1, Some(e)),
+    };
+    Res { code, err, stdout: o.text(), stderr: e.text() }
+}
+
+#[test]
+fn watchdog_stops_endless_loops() {
+    let _l = lock_lang("ja");
+    let limit = Duration::from_millis(200);
+    let cases: &[(&str, &str)] = &[
+        ("sync", "while (true) {}"),
+        ("catch", r#"try { for (;;) {} } catch { console.log("caught") } finally { console.log("finally") }"#),
+        ("calls", "function f() { return 1 } for (;;) f()"),
+        ("after-await", "await sleep(1); while (true) {}"),
+        ("timer", "setTimeout(() => { while (true) {} }, 1); await sleep(100000)"),
+        ("promise-job", "Promise.resolve().then(() => { while (true) {} }); await sleep(100000)"),
+    ];
+    for (name, src) in cases {
+        let start = Instant::now();
+        let r = run_watched(src, "[false, true]", limit);
+        assert_eq!(r.code, watchdog::STOPPED_CODE, "{name}: err {} stderr {:?}", r.err_text(), r.stderr);
+        assert!(r.err.is_none() && r.stdout.is_empty(), "{name}: err {} stdout {:?}", r.err_text(), r.stdout);
+        // "keep running" the first time, then "stop".
+        assert_eq!(r.stderr.matches("confirm(").count(), 2, "{name}: {:?}", r.stderr);
+        assert!(r.stderr.contains("無限ループ") && r.stderr.contains("スクリプトを中止しました"), "{name}: {:?}", r.stderr);
+        assert!(start.elapsed() < Duration::from_secs(10), "{name}: took {:?}", start.elapsed());
+    }
+}
+
+#[test]
+fn watchdog_ignores_waiting_scripts() {
+    let _l = lock_lang("ja");
+    // Busy for less than the limit at a time, waiting in between: the
+    // total time is far beyond the limit.
+    let src = r#"
+        const busy = (ms) => { const end = Date.now() + ms; while (Date.now() < end) {} };
+        for (let i = 0; i < 8; i++) { busy(100); await sleep(20) }
+        await new Promise((ok) => setTimeout(() => { busy(100); ok() }, 10));
+        for (let i = 0; i < 8; i++) { busy(100); ui.confirm("q") }
+        console.log("done");
+    "#;
+    let r = run_watched(src, "[false, false, false, false, false, false, false, false]", Duration::from_millis(400));
+    assert!(r.code == 0 && r.err.is_none() && r.stdout.contains("done"), "exit {} {} {:?}", r.code, r.err_text(), r.stderr);
+    assert!(!r.stderr.contains("無限ループ"), "asked: {:?}", r.stderr);
+}

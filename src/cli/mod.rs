@@ -7,8 +7,9 @@ mod vba;
 
 use std::path::Path;
 use std::sync::Arc;
+use std::time::Duration;
 
-use crate::engine::{self, Options};
+use crate::engine::{self, Options, watchdog};
 use crate::meta::{AssetFs, Meta};
 use crate::ui::{self, Ui};
 use crate::{Error, Result, err, i18n, pack, t};
@@ -31,6 +32,7 @@ struct Flags {
     answers: Option<String>,
     lang: Option<String>,
     debug: Option<String>,
+    watchdog: Option<String>,
     help: bool,
     version: bool,
 }
@@ -66,6 +68,7 @@ fn parse_flags(args: &[String]) -> Result<(Flags, Vec<String>)> {
             "ui-answers" => f.answers = Some(take(&mut i)?),
             "lang" => f.lang = Some(take(&mut i)?),
             "debug" => f.debug = Some(value.clone().unwrap_or_else(|| "script".into())),
+            "watchdog" => f.watchdog = Some(take(&mut i)?),
             "help" | "h" => f.help = true,
             "version" | "v" => f.version = true,
             _ => return Err(Error::msg(format!("flag provided but not defined: -{name}"))),
@@ -109,6 +112,9 @@ fn run(con: &ConsoleState, args: Vec<String>) -> i32 {
         let mut o = Options { script_path: script, code: Some(payload.code), args, meta: Some(m), assets: Some(assets), ..Default::default() };
         use_script_dir(con, &mut o);
         if let Err(e) = set_debug(&mut o, &env("XLJS_DEBUG"), &*u) {
+            return con.fail(None, &e);
+        }
+        if let Err(e) = set_watchdog(&mut o, &env("XLJS_WATCHDOG"), &*u) {
             return con.fail(None, &e);
         }
         return run_script(con, u, o);
@@ -159,11 +165,15 @@ fn run(con: &ConsoleState, args: Vec<String>) -> i32 {
         Err(e) => return con.fail(None, &e),
     };
     let debug = flags.debug.unwrap_or_else(|| env("XLJS_DEBUG"));
+    let watchdog = flags.watchdog.unwrap_or_else(|| env("XLJS_WATCHDOG"));
+    if let Err(e) = check_watchdog(&watchdog) {
+        return con.fail(None, &e);
+    }
     if rest.is_empty() {
         // Double-clicked without a script: ask what to do.
-        return launch::launch(con, u, explicit_lang);
+        return launch::launch(con, u, explicit_lang, &watchdog);
     }
-    start(con, u, rest, explicit_lang, &debug)
+    start(con, u, rest, explicit_lang, &debug, &watchdog)
 }
 
 /// Counts Ctrl+C: the first one only cancels while a progress indicator is
@@ -181,7 +191,7 @@ fn install_interrupt() {
 
 /// Runs the script rest[0] with the arguments rest[1..], or writes out the
 /// VBA code when workbooks are given instead of a script.
-fn start(con: &ConsoleState, u: Arc<dyn Ui>, rest: Vec<String>, explicit_lang: bool, debug: &str) -> i32 {
+fn start(con: &ConsoleState, u: Arc<dyn Ui>, rest: Vec<String>, explicit_lang: bool, debug: &str, watchdog: &str) -> i32 {
     if vba::is_workbook(&rest[0]) {
         return vba::drop_vba(con, u, &rest);
     }
@@ -193,6 +203,9 @@ fn start(con: &ConsoleState, u: Arc<dyn Ui>, rest: Vec<String>, explicit_lang: b
     let mut o = Options { script_path: rest[0].clone(), args: rest[1..].to_vec(), meta: Some(m), ..Default::default() };
     use_script_dir(con, &mut o);
     if let Err(e) = set_debug(&mut o, debug, &*u) {
+        return con.fail(Some(&*u), &e);
+    }
+    if let Err(e) = set_watchdog(&mut o, watchdog, &*u) {
         return con.fail(Some(&*u), &e);
     }
     run_script(con, u, o)
@@ -237,6 +250,34 @@ fn set_debug(o: &mut Options, value: &str, u: &dyn Ui) -> Result<()> {
         "window" => o.debug = true,
         _ => return Err(err!("cli.unknownDebug", value)),
     }
+    Ok(())
+}
+
+/// Parses --watchdog (XLJS_WATCHDOG): the seconds a script may run
+/// JavaScript without waiting before the user is asked whether to stop it
+/// (an endless loop). "" = the default (on only for the native UI, where
+/// Ctrl+C is not available); on/off; a number of seconds (0 = off).
+fn parse_watchdog(value: &str, native: bool) -> Result<Option<Duration>> {
+    let v = value.trim().to_lowercase();
+    match v.as_str() {
+        "" => Ok(native.then_some(watchdog::DEFAULT_LIMIT)),
+        "on" | "true" | "yes" => Ok(Some(watchdog::DEFAULT_LIMIT)),
+        "off" | "false" | "no" => Ok(None),
+        _ => match v.parse::<f64>() {
+            Ok(0.0) => Ok(None),
+            Ok(s) if s > 0.0 && s.is_finite() => Ok(Some(Duration::from_secs_f64(s))),
+            _ => Err(err!("cli.unknownWatchdog", value)),
+        },
+    }
+}
+
+/// Rejects a bad --watchdog before anything runs.
+fn check_watchdog(value: &str) -> Result<()> {
+    parse_watchdog(value, false).map(|_| ())
+}
+
+fn set_watchdog(o: &mut Options, value: &str, u: &dyn Ui) -> Result<()> {
+    o.watchdog = parse_watchdog(value, u.name() == "native")?;
     Ok(())
 }
 

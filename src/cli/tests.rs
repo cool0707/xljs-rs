@@ -6,7 +6,7 @@ use crate::testutil::{SharedBuf, lock_lang, repo_path, tempdir};
 fn launch_with(answers: serde_json::Value) -> (i32, String) {
     let log = SharedBuf::default();
     let u = Arc::new(ui::Mock::from_json(&answers.to_string(), Some(log.sink())).unwrap());
-    let code = launch::launch(&ConsoleState { has: true, own: false }, u, false);
+    let code = launch::launch(&ConsoleState { has: true, own: false }, u, false, "");
     (code, log.text())
 }
 
@@ -71,4 +71,26 @@ fn flags() {
     assert!(parse_flags(&["--nope".to_string()]).is_err());
     let (out, rest) = split_out(&["a.js".into(), "-o".into(), "b.exe".into()]).unwrap();
     assert_eq!((out.as_deref(), rest), (Some("b.exe"), vec!["a.js".to_string()]));
+}
+
+#[test]
+fn watchdog_flag() {
+    let s = |v: f64| Some(Duration::from_secs_f64(v));
+    let def = Some(watchdog::DEFAULT_LIMIT);
+    for (v, native, want) in [
+        ("", true, def),
+        ("", false, None),
+        ("on", false, def),
+        ("off", true, None),
+        ("0", true, None),
+        ("30", false, s(30.0)),
+        ("2.5", true, s(2.5)),
+    ] {
+        assert_eq!(parse_watchdog(v, native).unwrap(), want, "{v:?} native={native}");
+    }
+    for v in ["-1", "abc", "inf"] {
+        assert!(parse_watchdog(v, true).is_err(), "{v:?}");
+    }
+    let (f, rest) = parse_flags(&["--watchdog=off".into(), "a.js".into()]).unwrap();
+    assert_eq!((f.watchdog.as_deref(), rest), (Some("off"), vec!["a.js".to_string()]));
 }
