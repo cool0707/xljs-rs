@@ -9,7 +9,7 @@
     "font": ""
   },
   "messages": {
-    "cli.usage": "xljs - Excel/CSV script runner\n\nUsage:\n  xljs [options] <script.js|script.ts> [args...]\n  xljs pack <script> [-o out.exe]    create an exe with the script embedded\n  xljs check <script>                check syntax and imports without running\n  xljs init [dir]                    write type definitions (xljs.d.ts) and jsconfig.json\n  xljs vba <book.xlsm>... [-o out.txt]  write the VBA code of macro workbooks to one text file\n  xljs version                       print the version\n\nOptions:\n  --ui=auto|native|console|mock      UI to use (default: auto)\n  --ui-answers=<file.json>           answers file for the mock UI\n  --lang=auto|{0}                  message language (default: system language)\n  --debug[=script|window]            debug: script = run the script in a debugger window\n                                     (WebView2 developer tools: breakpoints, stepping);\n                                     window = only enable developer tools (F12) in windows\n\nXLJS_UI / XLJS_UI_ANSWERS / XLJS_LANG / XLJS_DEBUG environment variables work too (for packed exes).\n",
+    "cli.usage": "xljs - Excel/CSV script runner\n\nUsage:\n  xljs [options] <script.js|script.ts> [args...]\n  xljs pack <script> [-o out.exe]    create an exe with the script embedded\n  xljs check <script>                check syntax and imports without running\n  xljs init [dir]                    write type definitions (xljs.d.ts) and jsconfig.json\n  xljs vba <book.xlsm>... [-o out.txt]  write the VBA code of macro workbooks to one text file\n  xljs version                       print the version\n\nOptions:\n  --ui=auto|native|console|mock      UI to use (default: auto)\n  --ui-answers=<file.json>           answers file for the mock UI\n  --lang=auto|{0}                  message language (default: system language)\n  --debug[=script|window]            debug: script = run the script in a debugger window\n                                     (WebView2 developer tools: breakpoints, stepping);\n                                     window = only enable developer tools (F12) in windows\n  --watchdog=<seconds>|on|off       ask whether to stop a script that runs this long\n                                     without responding (endless loop; default: 15\n                                     seconds with the native UI, off otherwise)\n  --stop-key=<key>|on|off            ask whether to stop the running script when the key\n                                     is pressed (esc, f12, ctrl+shift+q...; Windows; default:\n                                     esc with the native UI, off otherwise)\n\nXLJS_UI / XLJS_UI_ANSWERS / XLJS_LANG / XLJS_DEBUG / XLJS_WATCHDOG / XLJS_STOP_KEY environment variables work too (for packed exes).\n",
     "cli.usageCheck": "usage: xljs check <script>",
     "cli.usagePack": "usage: xljs pack <script> [-o out.exe]",
     "cli.interrupted": "Interrupted",
@@ -19,6 +19,8 @@
     "cli.unknownUI": "unknown --ui value \"{0}\" (auto, native, console, mock)",
     "cli.unknownDebug": "unknown --debug value \"{0}\" (script, window, off)",
     "cli.debugNeedsWindows": "--debug needs the native UI with WebView2; the script runs as usual with --debug=window instead",
+    "cli.unknownWatchdog": "unknown --watchdog value \"{0}\" (seconds, on, off)",
+    "cli.unknownStopKey": "unknown --stop-key value \"{0}\" (a key like esc, f12 or ctrl+shift+q; on, off)",
     "cli.unknownLang": "unknown --lang value \"{0}\" (available: {1})",
     "cli.checkOK": "OK",
     "cli.created": "Created: {0}",
@@ -31,6 +33,9 @@
     "engine.bundleNotFunction": "internal error: the bundled script is not a function",
     "engine.notFinished": "the script did not finish (it awaits a promise that never settles)",
     "engine.unhandledRejection": "Unhandled promise rejection: {0}",
+    "engine.stopped": "The script was stopped",
+    "engine.stopKeyConfirm": "{0} was pressed.\n\nStop the script?\n(OK: stop / Cancel: keep running)",
+    "engine.stuckConfirm": "The script has been running for more than {0} seconds without responding. It may be stuck in an endless loop.\n\nStop the script?\n(OK: stop / Cancel: keep running)",
     "debug.windowTitle": "Debug - {0}",
     "debug.hint": "In the developer tools, open your script's files with Ctrl+P and set breakpoints, then press Run. F12 also opens the developer tools.",
     "debug.breakFirst": "Pause before the script starts",

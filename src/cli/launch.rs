@@ -19,7 +19,7 @@ const ICON_VBA: &[u8] = include_bytes!("icons/vba.ico");
 /// The start screen of xljs started without a script (double-clicked): it
 /// asks whether to run, debug or pack a script, or to extract the VBA code
 /// of macro workbooks, and asks for the files.
-pub(super) fn launch(con: &ConsoleState, u: Arc<dyn Ui>, explicit_lang: bool) -> i32 {
+pub(super) fn launch(con: &ConsoleState, u: Arc<dyn Ui>, explicit_lang: bool, stop: &super::Stop) -> i32 {
     let choice = |label: &str, note: &str, icon: &[u8]| Choice { label: t!(label), note: t!(note), icon: icon.to_vec() };
     let choices = [
         choice("cli.launchRun", "cli.launchRunNote", ICON_RUN),
@@ -35,7 +35,7 @@ pub(super) fn launch(con: &ConsoleState, u: Arc<dyn Ui>, explicit_lang: bool) ->
         LAUNCH_RUN | LAUNCH_DEBUG => {
             let Some(script) = pick_script(&*u, &t!("cli.selectScript")) else { return 0 };
             let debug = if c == LAUNCH_DEBUG { "script" } else { "" };
-            start(con, u, vec![script], explicit_lang, debug)
+            start(con, u, vec![script], explicit_lang, debug, stop)
         }
         LAUNCH_PACK => {
             let Some(script) = pick_script(&*u, &t!("cli.selectScriptToPack")) else { return 0 };

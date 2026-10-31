@@ -5,6 +5,7 @@ mod bundle;
 mod debug;
 pub(crate) mod loop_;
 mod sourcemap;
+pub mod watchdog;
 
 use std::fmt;
 use std::io::Write;
@@ -67,6 +68,15 @@ pub struct Options {
     pub debug_auto_run: bool,
     /// (tests) Receives what happens between Rust and the debugger page.
     pub debug_trace: Option<Arc<dyn Fn(String) + Send + Sync>>,
+    /// Asks the user whether to stop the script when it runs JavaScript
+    /// this long without waiting (an endless loop; see watchdog.rs). None
+    /// turns the check off. Not used by debug_script (the debugger can
+    /// pause the script).
+    pub watchdog: Option<std::time::Duration>,
+    /// Asks the user whether to stop the script when this key is pressed
+    /// while it runs JavaScript (see watchdog.rs). None turns it off; it
+    /// only works on Windows. Not used by debug_script either.
+    pub stop_key: Option<watchdog::StopKey>,
 }
 
 
@@ -198,7 +208,10 @@ pub fn run(mut o: Options) -> Result<i32> {
             }
         })));
     }
+    let stop = watchdog::install(&rt, Rc::downgrade(&host), o.watchdog, o.stop_key.clone());
     let res = ctx.with(|ctx| run_in(&ctx, &host, &code));
+    rt.set_interrupt_handler(None);
+    drop(stop);
     host.env.ui_cleanup(&host);
     ctx.with(|_| host.clear());
     rt.set_host_promise_rejection_tracker(None);

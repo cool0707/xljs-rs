@@ -310,6 +310,20 @@ pub(crate) fn progress_closed() {
     ACTIVE_PROGRESS.fetch_sub(1, Ordering::SeqCst);
 }
 
+/// Whether the key with the Windows virtual-key code vk is down now,
+/// whichever window has the focus (the stop key). Always false elsewhere.
+pub fn key_down(vk: u16) -> bool {
+    #[cfg(windows)]
+    {
+        native::key_down(vk)
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = vk;
+        false
+    }
+}
+
 /// The native UI. It is only available on Windows.
 pub fn new_native() -> Result<Arc<dyn Ui>> {
     #[cfg(windows)]
