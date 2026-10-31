@@ -1012,6 +1012,7 @@
     withProgress: (iterable, options) => withProgress(iterable, options),
     form: (options) => showForm(options),
     table: (rows, options) => showTable(rows, options),
+    chart: (spec, options) => showChart(spec, options),
     /** Whether the most recent progress was cancelled by the user. */
     get cancelled() { return lastCancelled; },
     error: (message) => native.uiError(title(), msg(message)),
@@ -1301,7 +1302,7 @@
         this._rejectPending(T("app.pageReloaded"));
       }
       const handlers = Array.from(this._dom.values()).map((h) => ({ hid: h.hid, sel: h.sel, type: h.type, preventDefault: h.preventDefault }));
-      this._n.post(wireStringify({ xljs: "init", state: this._store, handlers }));
+      this._n.post(wireStringify({ xljs: "init", state: this._store, handlers, chart: { lang: native.lang, texts: chartTexts() } }));
       this._ready = true;
       // The snapshot above covers the queued state and handler changes.
       const queue = this._queue.splice(0);
@@ -1449,7 +1450,7 @@
   }
 
   const FIELD_TYPES = ["text", "password", "number", "date", "month", "time", "select", "radio", "checkbox",
-    "textarea", "file", "files", "folder", "saveFile", "table"];
+    "textarea", "file", "files", "folder", "saveFile", "table", "chart"];
 
   /** Types of editable table cells. */
   const CELL_TYPES = ["text", "number", "date", "month", "time", "select", "checkbox"];
@@ -1597,8 +1598,9 @@
       .map((a) => String(a).replace(/^\*/, "")).map((a) => (a.startsWith(".") ? a : "." + a).toLowerCase());
     const num = (v) => (v === undefined || v === null || v === "" ? null : Number(v));
     const table = type === "table" ? formTable(f, f.rows, f.columns) : null;
+    const chart = type === "chart" ? chartOf(f.chart || { data: [] }) : null;
     return {
-      name, type, options, accept, table, tab, group, columns: f.columns,
+      name, type, options, accept, table, chart, tab, group, columns: f.columns,
       tableSpec: { selectable: f.selectable, editable: f.editable, validateRow: f.validateRow },
       label: f.label === undefined ? name : String(f.label),
       icon: faClass(f.icon),
@@ -1607,11 +1609,11 @@
       help: f.help ? String(f.help) : "",
       tooltip: f.tooltip ? String(f.tooltip) : "",
       min: num(f.min), max: num(f.max), step: f.step === undefined ? null : f.step,
-      rows: type === "table" ? Number(f.height) || 0 : Number(f.rows) || 0,
+      rows: type === "table" || type === "chart" ? Number(f.height) || 0 : Number(f.rows) || 0,
       pattern: f.pattern === undefined || f.pattern === null || f.pattern === "" ? null
         : f.pattern instanceof RegExp ? f.pattern : new RegExp("^(?:" + f.pattern + ")$"),
       patternMessage: f.patternMessage ? String(f.patternMessage) : "",
-      remember: f.remember !== false && type !== "password" && type !== "table",
+      remember: f.remember !== false && type !== "password" && type !== "table" && type !== "chart",
       validate: typeof f.validate === "function" ? f.validate : null,
       onChange: typeof f.onChange === "function" ? f.onChange : null,
       default: f.default,
@@ -1623,6 +1625,7 @@
   function toWire(f, v) {
     v = plainDate(v);
     if (f.type === "checkbox") return !!v;
+    if (f.type === "chart") return null;
     if (f.type === "table") {
       // Selected rows: the rows themselves or their indices.
       const n = f.table.data.length;
@@ -1653,8 +1656,12 @@
     return wireStr(w).trim() === "";
   }
 
+  /** Fields without a value: tables only shown, and charts (but editable Gantt charts, whose value is their rows). */
+  const noValue = (f) => (f.type === "table" && !f.table.select && !f.table.edit) || (f.type === "chart" && !f.chart.editable);
+
   function fromWire(f, w) {
     switch (f.type) {
+      case "chart": return f.chart.data.slice();
       case "checkbox": return w === true || w === "true";
       case "files": return wireList(w).map((p) => new FileSystemFileHandle(p));
       case "table": {
@@ -1712,8 +1719,9 @@
     const errors = {}, values = {}, cells = {};
     for (const f of fields) {
       const w = wire[f.name];
-      if (f.type === "table" && !f.table.select && !f.table.edit) continue; // shown only
+      if (noValue(f)) continue; // shown only
       values[f.name] = fromWire(f, w);
+      if (f.type === "chart") continue;
       if (f.type === "table" && f.table.edit) {
         cells[f.name] = await tableErrors(f.table);
         if (cells[f.name].length) {
@@ -1752,7 +1760,7 @@
    * passes): its checks and its own validate, not the form's validate.
    */
   async function checkField(fields, f, wire) {
-    if (f.type === "table" && !f.table.select) return ""; // cells are checked on their own
+    if ((f.type === "table" && !f.table.select) || f.type === "chart") return ""; // cells are checked on their own
     const w = wire[f.name], v = fromWire(f, w);
     const e = checkValue(f, w, v) || (f.validate ? await f.validate(v, rawValues(fields, wire)) : "");
     return e ? String(e) : "";
@@ -1761,7 +1769,7 @@
   /** Values of the fields as entered, without checking them (buttons with validate: false). */
   function rawValues(fields, wire) {
     const values = {};
-    for (const f of fields) if (!(f.type === "table" && !f.table.select && !f.table.edit)) values[f.name] = fromWire(f, wire[f.name]);
+    for (const f of fields) if (!noValue(f)) values[f.name] = fromWire(f, wire[f.name]);
     return values;
   }
 
@@ -1817,6 +1825,13 @@
       if (columns !== undefined) f.columns = columns;
       f.table = formTable(f.tableSpec, rows, f.columns);
       this._i.table(f);
+    }
+    /** Changes a chart field: the keys given replace those of its spec (an ExcelChart replaces it). */
+    chart(name, spec) {
+      const f = this._i.fields.find((x) => x.name === String(name) && x.type === "chart");
+      if (!f) throw new TypeError(T("form.noChart", name));
+      f.chart = chartOf(chartPatch(f.chart.spec, spec));
+      this._i.chart(f);
     }
     /** Sets the value of a field (as its default would be given). */
     setValue(name, value) {
@@ -1930,10 +1945,11 @@
     for (;;) {
       const cells = {};
       for (const f of fields) if (f.table && f.table.edit) cells[f.name] = await tableErrors(f.table);
+      for (const f of fields) if (f.chart) printChart(f.chart);
       const spec = {
         title: o.title, description: o.description, error,
         submit: o.noSubmit ? "" : o.submit || T("form.ok"), buttons: o.buttons.map((b) => b.label),
-        fields: fields.map((f) => Object.assign({
+        fields: fields.filter((f) => !f.chart).map((f) => Object.assign({
           name: f.name, label: f.label, type: f.type, options: f.options, required: f.required,
           placeholder: f.placeholder, help: f.help, accept: f.accept, value: wire[f.name], error: errors[f.name] || "",
           tab: f.tab >= 0 ? o.tabs[f.tab] : "",
@@ -2005,11 +2021,18 @@
     }
   }
 
+  /** A chart of a form for the console and the mock: as a table. */
+  function printChart(c) {
+    out(T("chart.noWindow", c.type));
+    native.uiTable(JSON.stringify(Object.assign(chartTable(c), { select: "" })));
+  }
+
   /** onSubmit's (and onChange's) ctx for the console and mock: a progress indicator once it reports progress. */
   function promptContext(o, fields, wire) {
     let p = null;
     return new FormContext({
       fields,
+      chart(f) { printChart(f.chart); },
       table(f) {
         native.uiTable(JSON.stringify(Object.assign({ title: f.label, select: "" }, tableText(f.table))));
       },
@@ -2033,7 +2056,7 @@
     let common = 0;
     for (const f of fields) {
       let fh = 10 + (f.type === "textarea" ? 10 + 21 * (f.rows || 4) : f.type === "files" ? 10 + 21 * Math.max(3, f.rows || 3)
-        : f.type === "table" ? 34 + 27 * tableLines(f)
+        : f.type === "table" ? 34 + 27 * tableLines(f) : f.type === "chart" ? 10 + chartHeight(f)
           : f.type === "checkbox" || f.type === "radio" ? 28 : 32);
       if (f.help) fh += 20;
       if (f.tab >= 0) heights[f.tab] += fh;
@@ -2052,6 +2075,9 @@
       fixedSize: options.resizable === false,
     };
   }
+
+  /** The height of a chart field in pixels: height lines (default 12) of 25 px, as the page draws it. */
+  const chartHeight = (f) => 25 * (f.rows || 12);
 
   /** Visible rows of a table field: height, or up to 8 (at least 3). */
   const tableLines = (f) => f.rows || Math.min(8, Math.max(3, f.table.data.length));
@@ -2091,7 +2117,9 @@
                 accept: f.accept, min: f.min, max: f.max, step: f.step,
                 rows: f.type === "table" ? tableLines(f) : f.rows, value: wire[f.name], tab: f.tab, group: f.group,
                 table: f.table ? Object.assign({ select: f.table.select, editable: editWire(f.table) || undefined }, tableWire(f.table)) : undefined,
+                chart: f.chart ? Object.assign({ height: chartHeight(f) }, chartInit(f.chart)) : undefined,
               })),
+              lang: native.lang, chartTexts: fields.some((f) => f.chart) ? chartTexts() : undefined,
             });
             for (const f of fields) {
               if (f.table && f.table.edit) page.send({ type: "cellErrors", field: f.name, errors: await tableErrors(f.table) });
@@ -2122,6 +2150,19 @@
               if (!page.n.isClosed()) page.send({ type: "cellErrors", field: f.name, row: m.row, errors });
             });
             await editQueue;
+            break;
+          }
+          case "chartClick":
+          case "chartChange": {
+            // A click on a chart field (onClick of its spec) or an edit of a Gantt chart.
+            const f = byName.get(m.field);
+            if (!f || !f.chart) return;
+            const c = f.chart;
+            try {
+              await chartEvent(c, m);
+            } catch (e) {
+              if (!page.n.isClosed()) page.send({ type: "fieldError", field: f.name, error: errorText(e).split("\n")[0] });
+            }
             break;
           }
           case "pick": {
@@ -2231,6 +2272,10 @@
     };
     return new FormContext({
       fields,
+      chart(f) {
+        flush();
+        page.send(Object.assign({ type: "chart", field: f.name }, chartInit(f.chart)));
+      },
       table(f) {
         flush();
         page.send(Object.assign({ type: "table", field: f.name, select: f.table.select, editable: editWire(f.table) || undefined }, tableWire(f.table)));
@@ -2477,6 +2522,457 @@
 
     if (!sel) return new TableView(page.n.closed, () => page.n.close());
     return page.n.closed.then(() => picked);
+  }
+
+  // ---------------------------------------------------------------- charts
+  //
+  // One definition (a ChartSpec) for every place a chart is shown: ui.chart,
+  // the chart fields of forms and xljs.chart in the script's own pages. The
+  // pages draw it with src/ui/web/chart.js (AG Charts, or Frappe Gantt for
+  // type "gantt"); here it is checked and sent as JSON (dates as
+  // { $date: ms }). Clicks and edits come back with the index of the row.
+
+  const CHART_TYPES = ["column", "bar", "line", "area", "scatter", "bubble", "histogram", "pie", "donut", "gantt"];
+  const CARTESIAN_TYPES = ["column", "bar", "line", "area", "scatter", "bubble", "histogram"];
+  /** Office's default theme colors (the pages' default palette too). */
+  const OFFICE_COLORS = ["#4472C4", "#ED7D31", "#A5A5A5", "#FFC000", "#5B9BD5", "#70AD47"];
+  const GANTT_KEYS = {
+    name: ["name", "名前", "タスク", "作業", "項目"],
+    start: ["start", "開始", "開始日"],
+    end: ["end", "終了", "終了日"],
+    progress: ["progress", "進捗", "進捗率"],
+    dependencies: ["dependencies", "前提", "依存"],
+    id: ["id", "ID"],
+  };
+
+  function chartTexts() {
+    return {
+      days: T("chart.days"), progress: T("chart.progress"), today: T("chart.today"), view: T("chart.view"),
+      views: { Day: T("chart.viewDay"), Week: T("chart.viewWeek"), Month: T("chart.viewMonth"), Year: T("chart.viewYear") },
+      empty: T("chart.empty"), badSpec: T("chart.expectedSpec"), badType: T("chart.badType", "{0}"),
+      noKey: T("chart.noKey", "{0}", "{1}"), noSeries: T("chart.noSeries"),
+    };
+  }
+
+  /** The keys of rows: object keys in the order first seen, or positions of array rows. */
+  function chartKeys(rows) {
+    const keys = [];
+    for (const r of rows) {
+      if (Array.isArray(r)) { for (let i = keys.length; i < r.length; i++) keys.push(i); }
+      else if (isRecord(r)) for (const k of Object.keys(r)) if (!keys.includes(k)) keys.push(k);
+    }
+    return keys;
+  }
+
+  /**
+   * A chart checked and with its defaults: { spec, type, data, keys, onClick,
+   * onChange, editable } (keys: x and series, or the Gantt keys), as
+   * chart.js's resolve does on the page.
+   */
+  function chartOf(spec) {
+    if (spec instanceof ExcelChart) spec = spec.toSpec();
+    if (!spec || typeof spec !== "object" || Array.isArray(spec)) throw new TypeError(T("chart.expectedSpec"));
+    const type = spec.type === undefined ? "column" : String(spec.type);
+    if (!CHART_TYPES.includes(type)) throw new TypeError(T("chart.badType", type));
+    for (const h of ["onClick", "onChange"]) {
+      if (spec[h] !== undefined && spec[h] !== null && typeof spec[h] !== "function") throw new TypeError(T("chart.badHandler", h));
+    }
+    const data = Array.from(spec.data || []);
+    const keys = chartKeys(data);
+    const has = (k) => keys.some((x) => String(x) === String(k));
+    const need = (k, what) => {
+      if (data.length && !has(k)) throw new TypeError(T("chart.noKey", k === undefined || k === null ? "" : String(k), what));
+      return keys.find((x) => String(x) === String(k)) ?? k;
+    };
+    const c = { spec, type, data, onClick: spec.onClick || null, onChange: spec.onChange || null, editable: false };
+    if (type === "gantt") {
+      const pick = (name) => {
+        const v = spec[name];
+        if (v !== undefined && v !== null) return need(v, name);
+        const found = GANTT_KEYS[name].find(has);
+        return found === undefined ? undefined : keys.find((x) => String(x) === found);
+      };
+      c.keys = { name: pick("name"), start: pick("start"), end: pick("end"), progress: pick("progress"), dependencies: pick("dependencies"), id: pick("id") };
+      if (c.keys.name === undefined) c.keys.name = keys[0];
+      if (c.keys.start === undefined && data.length) throw new TypeError(T("chart.noStart"));
+      const e = spec.editable;
+      c.editable = e === true || (!!e && typeof e === "object" && (!!e.dates || !!e.progress));
+      return c;
+    }
+    if (spec.editable) throw new TypeError(T("chart.notGantt", "editable"));
+    const x = spec.x !== undefined && spec.x !== null ? need(spec.x, "x") : keys[0];
+    let ys = spec.y;
+    if (ys === undefined || ys === null) {
+      ys = keys.filter((k) => String(k) !== String(x) && data.some((r) => r !== null && r !== undefined && typeof plainDate(r[k]) === "number"));
+      if (type === "histogram") ys = [];
+      else if (type === "pie" || type === "donut") ys = ys.slice(0, 1);
+    }
+    const series = (Array.isArray(ys) ? ys : [ys]).map((s) => {
+      const o = s !== null && typeof s === "object" ? s : { key: s };
+      const st = o.type === undefined ? type : String(o.type);
+      if (!CARTESIAN_TYPES.includes(st) && st !== type) throw new TypeError(T("chart.badType", st));
+      const key = need(o.key, "y");
+      if (type === "bubble" && (o.size === undefined || o.size === null)) throw new TypeError(T("chart.noSize", String(key)));
+      return { key, label: o.label === undefined ? String(key) : String(o.label), size: o.size === undefined || o.size === null ? undefined : need(o.size, "size") };
+    });
+    if (!series.length && type !== "histogram" && data.length) throw new TypeError(T("chart.noSeries"));
+    c.keys = { x, series };
+    return c;
+  }
+
+  /** A value for the page: JSON, dates as { $date: ms }; functions are left out. */
+  function chartWireValue(v) {
+    v = plainDate(v);
+    if (v === undefined || typeof v === "function" || typeof v === "symbol") return undefined;
+    if (v === null || typeof v === "string" || typeof v === "boolean") return v;
+    if (typeof v === "number") return isFinite(v) ? v : null;
+    if (typeof v === "bigint") return Number(v);
+    if (v instanceof Date) return isNaN(v) ? null : { $date: v.getTime() };
+    if (v instanceof FileSystemHandle) return v.path;
+    if (Array.isArray(v)) return v.map((x) => { const w = chartWireValue(x); return w === undefined ? null : w; });
+    if (typeof v === "object") {
+      const o = {};
+      for (const k of Object.keys(v)) { const w = chartWireValue(v[k]); if (w !== undefined) o[k] = w; }
+      return o;
+    }
+    return String(v);
+  }
+
+  /** What a page needs to draw a chart: { spec, click, change }. */
+  function chartInit(c) {
+    const spec = chartWireValue(Object.assign({}, c.spec, { data: undefined }));
+    spec.type = c.type;
+    spec.data = c.data.map((r) => { const w = chartWireValue(r); return w === undefined ? null : w; });
+    return { spec, click: !!c.onClick, change: !!(c.onChange || c.editable) };
+  }
+
+  /** The chart as a table for the console and the mock: { title, columns, rows } of text. */
+  function chartTable(c, windowTitle) {
+    const text = (v) => { const w = cellWire(v); return w === null ? "" : String(w); };
+    const k = c.keys;
+    const keys = c.type === "gantt" ? [k.name, k.start, k.end, k.progress].filter((x) => x !== undefined)
+      : [k.x].concat(k.series.flatMap((s) => (s.size === undefined ? [s.key] : [s.key, s.size]))).filter((x) => x !== undefined);
+    return {
+      title: windowTitle || (c.spec.title === undefined ? title() : String(c.spec.title)),
+      columns: keys.map(String),
+      rows: c.data.map((r) => keys.map((key) => text(r === null || r === undefined ? null : r[key]))),
+    };
+  }
+
+  /** Writes the changes of a Gantt task (from the page) into its row; returns them as Dates and numbers. */
+  function applyGanttChange(c, i, changes) {
+    const row = c.data[i];
+    if (row === null || typeof row !== "object") return null;
+    const out = {};
+    for (const name of ["start", "end", "progress"]) {
+      if (!changes || !(name in changes) || c.keys[name] === undefined) continue;
+      let v = changes[name];
+      if (v && typeof v === "object" && "$date" in v) v = new Date(v.$date);
+      if (name === "progress") v = Number(v);
+      row[c.keys[name]] = v;
+      out[name] = v;
+    }
+    return out;
+  }
+
+  /**
+   * Handles "click" and "change" messages of a page about chart c: runs
+   * onClick(row, info) / onChange(row, changes). Returns its promise.
+   */
+  async function chartEvent(c, m) {
+    const i = Number(m.index);
+    if (!(i >= 0 && i < c.data.length)) return;
+    if (m.type === "click" || m.type === "chartClick") {
+      if (c.onClick) await c.onClick(c.data[i], { index: i, series: m.series === undefined ? null : m.series });
+    } else {
+      const changes = applyGanttChange(c, i, m.changes);
+      if (changes && c.onChange) await c.onChange(c.data[i], changes, i);
+    }
+  }
+
+  /** What ui.chart returns: the window, closed, close() and update(spec). */
+  class ChartView {
+    constructor(closed, close, update) {
+      define(this, "closed", closed);
+      define(this, "_close", close);
+      define(this, "_update", update);
+    }
+    close() { this._close(); }
+    /** Changes the chart: the keys given replace those of the spec shown (an ExcelChart or { data } replaces all or the rows). */
+    update(spec) { this._update(spec); return this; }
+  }
+
+  /** The spec after update(patch): an ExcelChart replaces it, an object changes the keys it has. */
+  function chartPatch(spec, patch) {
+    if (patch instanceof ExcelChart) return patch.toSpec();
+    if (!patch || typeof patch !== "object") throw new TypeError(T("chart.expectedSpec"));
+    return Object.assign({}, spec, patch);
+  }
+
+  function showChart(spec, options = {}) {
+    if (typeof options === "string") options = { title: options };
+    options = options || {};
+    let c = chartOf(spec);
+    const t = options.title !== undefined ? String(options.title) : c.spec.title ? String(c.spec.title) : title();
+    if (!native.supportsWindows) {
+      const print = () => {
+        out(T("chart.noWindow", c.type));
+        native.uiTable(JSON.stringify(Object.assign(chartTable(c, options.title), { select: "" })));
+      };
+      print();
+      return new ChartView(Promise.resolve(), () => {}, (s) => { c = chartOf(chartPatch(c.spec, s)); print(); });
+    }
+    const page = openPage("chart.html", {
+      title: t, width: Number(options.width) || 900, height: Number(options.height) || 560, fixedSize: options.resizable === false,
+      titleBar: customTitleBar(options.titleBar), icon: faClass(options.icon),
+    }, (m) => {
+      if (m.type === "ready") page.send(Object.assign({ type: "init", lang: native.lang, texts: chartTexts() }, chartInit(c)));
+      else if (m.type === "click" || m.type === "change") chartEvent(c, m).catch(fail);
+    });
+    function fail(e) { native.uiError(t, errorText(e)); }
+    return new ChartView(page.n.closed, () => page.n.close(), (s) => {
+      c = chartOf(chartPatch(c.spec, s));
+      if (!page.n.isClosed()) page.send(Object.assign({ type: "update" }, chartInit(c)));
+    });
+  }
+
+  // ---- Excel's charts (Worksheet.charts)
+
+  const EXCEL_KINDS = {
+    barChart: "bar", bar3DChart: "bar", lineChart: "line", line3DChart: "line", pieChart: "pie", pie3DChart: "pie",
+    ofPieChart: "pie", doughnutChart: "donut", areaChart: "area", area3DChart: "area", scatterChart: "scatter", bubbleChart: "bubble",
+  };
+
+  /** The name of an Excel chart kind that cannot be shown. */
+  function excelKindName(kind) {
+    const k = {
+      radarChart: "chart.kind.radar", stockChart: "chart.kind.stock", surfaceChart: "chart.kind.surface", surface3DChart: "chart.kind.surface",
+      waterfall: "chart.kind.waterfall", funnel: "chart.kind.funnel", treemap: "chart.kind.treemap", sunburst: "chart.kind.sunburst",
+      clusteredColumn: "chart.kind.histogram", paretoLine: "chart.kind.pareto", boxWhisker: "chart.kind.boxWhisker", regionMap: "chart.kind.map",
+    }[kind];
+    return k ? T(k) : kind;
+  }
+
+  /** Dates of the native side ({ $date: [y, m, d, h, mi, s, ms] }) as Date. */
+  function reviveExcel(v) {
+    if (Array.isArray(v)) return v.map(reviveExcel);
+    if (v === null || typeof v !== "object") return v;
+    if (Array.isArray(v.$date)) { const [y, m, d, h, mi, s, ms] = v.$date; return new Date(y, m - 1, d, h, mi, s, ms); }
+    const o = {};
+    for (const k of Object.keys(v)) o[k] = reviveExcel(v[k]);
+    return o;
+  }
+
+  /** A date of an Excel serial number (the 1900 system). */
+  function serialDate(n) {
+    const days = Math.floor(n);
+    const d = new Date(1899, 11, 30 + days);
+    d.setMilliseconds(Math.round((n - days) * 86400000));
+    return d;
+  }
+  const dateFormatCode = (f) => /[ymd]/i.test(String(f || "").replace(/"[^"]*"|\[[^\]]*\]|\\./g, "").replace(/general/i, ""));
+
+  /** A key that is not among used (name, then name_2, ...). */
+  function freshKey(name, used) {
+    let k = name, n = 1;
+    while (used.has(k)) k = `${name}_${++n}`;
+    used.add(k);
+    return k;
+  }
+
+  /**
+   * The ChartSpec of an Excel chart (raw: from native.xlsxCharts) and what
+   * could not be carried over: { spec, warnings }. Throws for kinds that
+   * cannot be shown. opts.gantt: true/false forces or prevents reading
+   * stacked horizontal bars as a Gantt chart.
+   */
+  function excelChartSpec(raw, opts = {}) {
+    const warnings = [];
+    const warn = (key, ...a) => { const m = T(key, ...a); if (!warnings.includes(m)) warnings.push(m); };
+    const name = raw.name || "";
+    if (raw.chartEx) throw new TypeError(T("chart.excelUnsupported", name, excelKindName(raw.chartEx)));
+    const groups = Array.from(raw.groups || []).filter((g) => (g.series || []).length);
+    if (!groups.length) throw new TypeError(T("chart.excelEmpty", name));
+    for (const g of groups) if (!EXCEL_KINDS[g.kind]) throw new TypeError(T("chart.excelUnsupported", name, excelKindName(g.kind)));
+    const axes = Array.from(raw.axes || []);
+    const axis = (id) => axes.find((a) => a.id === id) || {};
+    const vals = (src) => (src && Array.isArray(src.values) ? src.values : []);
+    const all = groups.flatMap((g) => g.series.map((s) => ({ g, s })));
+    if (groups.some((g) => /3D/.test(g.kind))) warn("chart.warn3d");
+    if (groups.some((g) => g.kind === "ofPieChart")) warn("chart.warnOfPie");
+    if (all.some(({ s }) => s.trendline)) warn("chart.warnTrendline");
+    if (all.some(({ s }) => s.errBars)) warn("chart.warnErrBars");
+    if (raw.dataTable) warn("chart.warnDataTable");
+    const first = groups[0];
+    const firstAxis = (g) => (g.axes || [])[0], valueAxis = (g) => (g.axes || [])[1];
+    const autoTitle = () => (raw.title === true || (raw.title === undefined && !raw.autoTitleDeleted && all.length === 1)
+      ? all[0].s.name || "" : "");
+    const chartTitle = typeof raw.title === "string" ? raw.title : autoTitle();
+
+    // A Gantt chart: stacked horizontal bars whose first series (the starts) is not filled.
+    const bars = first.kind === "barChart" || first.kind === "bar3DChart";
+    const startsLike = (s) => vals(s.val).some((v) => v instanceof Date) || dateFormatCode(axis(valueAxis(first)).format) || dateFormatCode(s.val && s.val.format);
+    const looksGantt = bars && first.barDir === "bar" && /stacked/i.test(first.grouping || "") && first.series.length >= 2 &&
+      groups.length === 1 && !!first.series[0].noFill && startsLike(first.series[0]);
+    if (opts.gantt === true && !(bars && first.series.length >= 2)) throw new TypeError(T("chart.excelNotGantt", name));
+    if (opts.gantt === true || (opts.gantt === undefined && looksGantt)) {
+      const [s0, s1, s2] = first.series;
+      if (first.series.length > 3) warn("chart.warnGanttSeries");
+      const used = new Set();
+      const kName = freshKey((s0.cat && s0.cat.header) || T("chart.gantt.name"), used);
+      const kStart = freshKey(s0.name || T("chart.gantt.start"), used);
+      const kEnd = freshKey(T("chart.gantt.end"), used);
+      const kProgress = s2 ? freshKey(T("chart.gantt.progress"), used) : undefined;
+      const cats = vals(s0.cat), starts = vals(s0.val), d1 = vals(s1.val), d2 = s2 ? vals(s2.val) : [];
+      const n = Math.max(cats.length, starts.length);
+      let rows = [];
+      for (let i = 0; i < n; i++) {
+        let st = starts[i];
+        if (typeof st === "number") st = serialDate(st);
+        const a = Number(d1[i]) || 0, b = s2 ? Number(d2[i]) || 0 : 0, dur = a + b;
+        let end = null;
+        if (st instanceof Date) {
+          const whole = !(st.getHours() || st.getMinutes()) && Number.isInteger(dur);
+          // Excel's bar ends where the next day starts; the end date is the last day of the task.
+          end = whole ? new Date(st.getFullYear(), st.getMonth(), st.getDate() + Math.max(dur, 1) - 1) : new Date(st.getTime() + dur * 86400000);
+        }
+        const row = { [kName]: cats[i] === undefined || cats[i] === null ? String(i + 1) : cats[i], [kStart]: st instanceof Date ? st : null, [kEnd]: end };
+        if (kProgress) row[kProgress] = dur > 0 ? a / dur : 0;
+        rows.push(row);
+      }
+      // Excel draws the first category at the bottom unless the axis is reversed.
+      if (!axis(firstAxis(first)).reversed) rows = rows.reverse();
+      const spec = { type: "gantt", data: rows, name: kName, start: kStart, end: kEnd };
+      if (kProgress) spec.progress = kProgress;
+      if (chartTitle) spec.title = chartTitle;
+      return { spec, warnings };
+    }
+
+    const typeOf = (g) => {
+      const t = EXCEL_KINDS[g.kind];
+      return t === "bar" ? (g.barDir === "bar" ? "bar" : "column") : t;
+    };
+    const type = typeOf(first);
+    const spec = { type };
+    if (chartTitle) spec.title = chartTitle;
+    spec.legend = raw.legend ? ({ b: "bottom", t: "top", l: "left", r: "right", tr: "right" }[raw.legend] || "right") : false;
+    const used = new Set();
+
+    if (type === "pie" || type === "donut") {
+      if (all.length > 1) warn("chart.warnPieSeries");
+      const s = first.series[0];
+      const cats = vals(s.cat), values = vals(s.val);
+      const kx = freshKey((s.cat && s.cat.header) || T("chart.category"), used);
+      const ky = freshKey(s.name || (s.val && s.val.header) || T("chart.seriesN", 1), used);
+      const n = Math.max(cats.length, values.length);
+      spec.data = Array.from({ length: n }, (_, i) => ({ [kx]: cats[i] ?? String(i + 1), [ky]: values[i] ?? null }));
+      spec.x = kx;
+      spec.y = [Object.assign({ key: ky }, s.val && s.val.format ? { format: s.val.format } : {})];
+      const pts = new Map((s.points || []).filter((p) => p.color).map((p) => [p.idx, p.color]));
+      if (pts.size) spec.colors = Array.from({ length: n }, (_, i) => pts.get(i) || OFFICE_COLORS[i % OFFICE_COLORS.length]);
+      return { spec, warnings };
+    }
+
+    const points = type === "scatter" || type === "bubble";
+    const catAx = axis(firstAxis(first));
+    const primary = valueAxis(first);
+    const xSrc = (s) => (points ? s.xVal || s.cat : s.cat);
+    const ySrc = (s) => (points ? s.yVal || s.val : s.val);
+    const withX = all.find(({ s }) => vals(xSrc(s)).length) || all[0];
+    const xHeader = xSrc(withX.s) && xSrc(withX.s).header;
+    const kx = freshKey(xHeader || catAx.title || T(points ? "chart.x" : "chart.category"), used);
+    const series = all.map(({ g, s }, k) => {
+      const key = freshKey(s.name || (ySrc(s) && ySrc(s).header) || T("chart.seriesN", k + 1), used);
+      const o = { key };
+      let st = typeOf(g);
+      if (g.kind === "scatterChart" && /line|smooth/i.test(g.scatterStyle || "") && !s.noFill) st = "line";
+      if (st !== type) o.type = st;
+      if (valueAxis(g) !== primary && !points) o.axis = "y2";
+      if (s.color) o.color = s.color;
+      const f = ySrc(s) && ySrc(s).format;
+      if (f) o.format = f;
+      if (type === "bubble") o.size = freshKey(`${key} (${T("chart.size")})`, used);
+      return o;
+    });
+    // Rows: one per category, or (points whose series have their own X) one per point.
+    const xs = all.map(({ s }) => vals(xSrc(s)));
+    const sameX = xs.every((x) => JSON.stringify(x) === JSON.stringify(xs[0])) || !points;
+    let rows = [];
+    if (sameX) {
+      const cats = vals(xSrc(withX.s));
+      const n = Math.max(cats.length, ...all.map(({ s }) => vals(ySrc(s)).length));
+      for (let i = 0; i < n; i++) {
+        const row = { [kx]: cats[i] ?? (points ? i + 1 : String(i + 1)) };
+        all.forEach(({ s }, k) => {
+          row[series[k].key] = vals(ySrc(s))[i] ?? null;
+          if (series[k].size) row[series[k].size] = vals(s.bubbleSize)[i] ?? null;
+        });
+        rows.push(row);
+      }
+    } else {
+      all.forEach(({ s }, k) => {
+        const x = xs[k].length ? xs[k] : vals(ySrc(s)).map((_, i) => i + 1);
+        x.forEach((xv, i) => {
+          const row = { [kx]: xv };
+          series.forEach((o) => { row[o.key] = null; if (o.size) row[o.size] = null; });
+          row[series[k].key] = vals(ySrc(s))[i] ?? null;
+          if (series[k].size) row[series[k].size] = vals(s.bubbleSize)[i] ?? null;
+          rows.push(row);
+        });
+      });
+    }
+    // Horizontal bars start at the bottom in Excel unless the axis is reversed (and columns go right to left when it is).
+    if (!points && (type === "bar") !== !!catAx.reversed) rows = rows.reverse();
+    spec.data = rows;
+    spec.x = kx;
+    spec.y = series;
+    if (/percentStacked/.test(first.grouping || "")) spec.stacked = "percent";
+    else if (/stacked/.test(first.grouping || "")) spec.stacked = true;
+    const lines = all.filter(({ g }) => g.kind === "lineChart" || g.kind === "line3DChart" || g.kind === "scatterChart");
+    if (lines.length && lines.every(({ s }) => s.marker === false)) spec.markers = false;
+    // Axes: titles, formats (not those linked to the cells: the series' own apply), bounds and log scale.
+    const axisSpec = (a, linked) => {
+      const o = {};
+      if (a.title) o.title = a.title;
+      const f = a.format && !/^general$/i.test(a.format) && !a.sourceLinked ? a.format : linked;
+      if (f) o.format = f;
+      if (typeof a.min === "number") o.min = a.min;
+      if (typeof a.max === "number") o.max = a.max;
+      if (typeof a.logBase === "number") o.log = true;
+      return o;
+    };
+    const ax = {};
+    const x = axisSpec(catAx, points ? xSrc(withX.s) && xSrc(withX.s).format : "");
+    if (Object.keys(x).length) ax.x = x;
+    const fmtOf = (g) => { const s = g.series.find((z) => ySrc(z) && ySrc(z).format); return s ? ySrc(s).format : ""; };
+    // A 100% stack's axis shows percentages, not the values' format.
+    const y = axisSpec(axis(primary), spec.stacked === "percent" ? "" : fmtOf(first));
+    if (Object.keys(y).length) ax.y = y;
+    const g2 = groups.find((g) => valueAxis(g) !== primary);
+    if (g2 && !points) {
+      const y2 = axisSpec(axis(valueAxis(g2)), fmtOf(g2));
+      if (Object.keys(y2).length) ax.y2 = y2;
+    }
+    if (Object.keys(ax).length) spec.axes = ax;
+    return { spec, warnings };
+  }
+
+  /** A chart of a sheet (Worksheet.charts). */
+  class ExcelChart {
+    constructor(sheet, raw) {
+      define(this, "_raw", raw);
+      define(this, "sheet", sheet);
+      this.name = raw.name || "";
+      this.range = raw.range || null;
+      let r = null, error = null;
+      try { r = excelChartSpec(raw); } catch (e) { error = e; }
+      this.title = r ? r.spec.title || "" : typeof raw.title === "string" ? raw.title : "";
+      this.type = r ? r.spec.type : null;
+      this.supported = !!r;
+      this.warnings = r ? r.warnings : [error.message];
+    }
+    /** The chart as a ChartSpec (new rows each time). opts.gantt: true/false reads stacked horizontal bars as a Gantt chart or not. */
+    toSpec(opts = {}) { return excelChartSpec(this._raw, opts || {}).spec; }
   }
 
   // ---------------------------------------------------------------- csv
@@ -2828,6 +3324,10 @@
       return this.write(rows, Object.assign({}, opts, { start: "A" + next, header }));
     }
     /** Used range, e.g. "A1:D20". */
+    /** Excel's charts on the sheet (ExcelChart), in the order of the sheet's drawing. */
+    get charts() {
+      return JSON.parse(native.xlsxCharts(this._book._h, this._name)).map((raw) => new ExcelChart(this, reviveExcel(raw)));
+    }
     get dimension() { return native.xlsxDimension(this._book._h, this._name); }
     get rowCount() { return native.xlsxRowCount(this._book._h, this._name); }
     /** setColumnWidth("A", 20) or setColumnWidth("A:C", 20) */

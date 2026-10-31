@@ -654,3 +654,71 @@ console.log(changes, v.purchase.name, v.kind);
 "#;
     form_case("change.js", src, "1 仕入_202604.csv a\n", pages);
 }
+
+#[test]
+fn chart_window() {
+    let pages: Vec<PageFn> = vec![Box::new(|p| {
+        let init = p.expect("init");
+        let spec = as_json(&init["spec"]);
+        check!(p, init["click"] == true && init["change"] == false && init["lang"] == "ja", "init = {}", as_json(&init));
+        // Dates as { $date: ms }; functions are left out.
+        check!(
+            p,
+            spec.contains(r#""日":{"$date":"#) && spec.contains(r#""type":"line""#) && !spec.contains("onClick"),
+            "spec = {spec}"
+        );
+        check!(p, init["texts"]["today"] == "今日" && init["texts"]["views"]["Week"] == "週", "texts = {}", as_json(&init["texts"]));
+        p.send(json!({"type": "click", "index": 1, "series": "売上"}), &[]);
+        let u = p.expect("update");
+        check!(p, u["spec"]["type"] == "column" && u["spec"]["data"].as_array().map(|a| a.len()) == Some(1), "update = {}", as_json(&u));
+        p.wait_closed();
+    })];
+    let src = r#"
+const rows = [{ 日: new Date(2026, 3, 1), 売上: 1 }, { 日: new Date(2026, 3, 2), 売上: 2 }];
+const view = ui.chart({ type: "line", data: rows, onClick(row, info) {
+  console.log("click", row.売上, info.index, info.series);
+  view.update({ type: "column", data: rows.slice(0, 1) });
+  view.close();
+} });
+await view.closed;
+"#;
+    form_case("chart.js", src, "click 2 1 売上\n", pages);
+}
+
+#[test]
+fn form_window_chart() {
+    let pages: Vec<PageFn> = vec![Box::new(|p| {
+        let init = p.expect("init");
+        let f = &init["fields"][1];
+        check!(p, f["type"] == "chart" && f["chart"]["height"] == 250 && f["chart"]["change"] == true, "field = {}", as_json(f));
+        check!(p, init["chartTexts"]["days"] == "{0}日", "chartTexts = {}", as_json(&init["chartTexts"]));
+        // A task dragged by two days, then a click.
+        let (s, e) = (1_794_268_800_000_i64, 1_794_700_800_000_i64);
+        p.send(json!({"type": "chartChange", "field": "g", "index": 0, "changes": {"start": {"$date": s}, "end": {"$date": e}}}), &[]);
+        p.send(json!({"type": "chartChange", "field": "g", "index": 0, "changes": {"progress": 0.5}}), &[]);
+        p.send(json!({"type": "chartClick", "field": "g", "index": 0}), &[]);
+        let err = p.expect("fieldError");
+        check!(p, err["field"] == "g" && err["error"].as_str().unwrap_or("").contains("クリック"), "fieldError = {}", as_json(&err));
+        p.send(json!({"type": "submit", "values": {"a": "x", "g": null}}), &[]);
+        p.expect("running");
+        let c = p.expect("chart");
+        check!(p, c["field"] == "g" && c["spec"]["view"] == "week" && c["spec"]["type"] == "gantt", "chart = {}", as_json(&c));
+        p.expect("done");
+        p.send(json!({"type": "close"}), &[]);
+        p.wait_closed();
+    })];
+    let src = r#"
+const tasks = [{ 名前: "設計", 開始: new Date(2026, 10, 2), 終了: new Date(2026, 10, 6), 進捗: 0 }];
+const v = await ui.form({
+  fields: [
+    { name: "a" },
+    { name: "g", type: "chart", height: 10, chart: { type: "gantt", data: tasks, editable: true,
+      onChange(row, changes) { console.log("change", Object.keys(changes).join(","), row === tasks[0]); },
+      onClick() { throw new Error("クリックの失敗"); } } },
+  ],
+  onSubmit(values, ctx) { ctx.chart("g", { view: "week" }); },
+});
+console.log(v.a, v.g.length, v.g[0].開始.getTime() === 1794268800000, v.g[0].進捗);
+"#;
+    form_case("chartform.js", src, "change start,end true\nchange progress true\nx 1 true 0.5\n", pages);
+}

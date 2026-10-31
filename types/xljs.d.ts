@@ -209,6 +209,12 @@ declare global {
     table<T>(rows: Iterable<T>, options: TableSelectOptions): Promise<T[]>;
     /** 表示のみ。ウィンドウを開いてすぐに戻る（閉じるまでプロセスは終了しない） */
     table<T>(rows: Iterable<T>, options?: TableOptions | string): TableView;
+    /**
+     * グラフ（AG Charts）やガントチャート（Frappe Gantt）をウィンドウに表示し、すぐに戻る（閉じるまでプロセスは終了しない）。
+     * Excel のグラフ（sheet.charts の要素）もそのまま渡せる。
+     * コンソール・mock ではグラフの元の行を表で出力する。options はウィンドウのタイトルの文字列か ChartWindowOptions
+     */
+    chart(spec: ChartSpec | ExcelChart, options?: ChartWindowOptions | string): ChartView;
     /** 直近の進捗表示がキャンセルされたか */
     readonly cancelled: boolean;
     /** エラーダイアログを表示する */
@@ -229,7 +235,7 @@ declare global {
   // ------------------------------------------------------------------ ui.form
 
   type FormFieldType = "text" | "password" | "number" | "date" | "month" | "time" | "select" | "radio" |
-    "checkbox" | "textarea" | "file" | "files" | "folder" | "saveFile" | "table";
+    "checkbox" | "textarea" | "file" | "files" | "folder" | "saveFile" | "table" | "chart";
 
   /**
    * フォームの項目。値の型は type による:
@@ -238,7 +244,8 @@ declare global {
    * checkbox は boolean、file / saveFile は FileSystemFileHandle | null、
    * files は FileSystemFileHandle[]、folder は FileSystemDirectoryHandle | null、
    * table は選択した行（元のオブジェクト）の配列（selectable: "single" なら行か null。selectable なしなら値なし。
-   * 編集できる表で selectable なしならすべての行）
+   * 編集できる表で selectable なしならすべての行）、
+   * chart は値なし（editable なガントチャートだけ、すべての行（編集が書き込まれた元のオブジェクト））
    */
   interface FormField {
     /** 値のキー */
@@ -283,8 +290,10 @@ declare global {
      */
     validateRow?(row: any, index: number): Record<string, string | null | undefined> | string | null | undefined | void |
       Promise<Record<string, string | null | undefined> | string | null | undefined | void>;
-    /** table の表示する高さ（行数。既定は 8 行まで） */
+    /** table の表示する高さ（行数。既定は 8 行まで）。chart の高さ（1 行 25px として。既定 12） */
     height?: number;
+    /** chart の項目のグラフ（ui.chart と同じ定義。ExcelChart も可）。ctx.chart(name, spec) で変えられる */
+    chart?: ChartSpec | ExcelChart;
     /** ファイル系の拡張子（".xlsx" など）。ピッカーとドロップに使う */
     accept?: string | string[];
     /** 入力全体が一致すべき正規表現（文字列なら全体一致） */
@@ -345,6 +354,11 @@ declare global {
     table(name: string, rows: readonly unknown[], columns?: (string | FormTableColumn)[]): void;
     /** 項目の値を変える（default と同じ形で指定。table は選択する行） */
     setValue(name: string, value: unknown): void;
+    /**
+     * chart の項目のグラフを変える。指定したキーだけが置き換わる（{ data: rows } で行だけ差し替え）。ExcelChart なら丸ごと置き換え。
+     * コンソール・mock では表を出力する
+     */
+    chart(name: string, spec: Partial<ChartSpec> | ExcelChart): void;
     /** ui.withProgress と同じ。進捗をフォーム内に表示し、中止されると onSubmit を終える（onCancel: "break" なら反復が終わるだけ） */
     withProgress<T>(iterable: Iterable<T>, options?: WithProgressOptions<T>): Generator<T, void, undefined>;
     withProgress<T>(iterable: AsyncIterable<T>, options?: WithProgressOptions<T>): AsyncIterableIterator<T>;
@@ -505,6 +519,149 @@ declare global {
     /** ウィンドウが閉じられると解決する（コンソールではすぐ解決） */
     readonly closed: Promise<void>;
     close(): void;
+  }
+
+  // ------------------------------------------------------------------ ui.chart
+
+  /**
+   * グラフの種類。column は縦棒、bar は横棒（Excel と同じ呼び方）。gantt はガントチャート（Frappe Gantt）、ほかは AG Charts で描く。
+   * Excel のレーダー・株価・等高線、Excel 2016 以降のウォーターフォール・ツリーマップなどは AG Charts Community にないので使えない
+   */
+  type ChartType = "column" | "bar" | "line" | "area" | "scatter" | "bubble" | "histogram" | "pie" | "donut" | "gantt";
+
+  /**
+   * グラフの定義。ui.chart・フォームの chart 項目・画面の xljs.chart で共通。
+   * data は行オブジェクト（ui.table や sheet.rows() と同じ形。配列の行なら列は位置）で、列はキー名で指定する。
+   * 日付は Date（ローカルの日時）。関数（onClick / onChange 以外）は画面に渡せないので使えない
+   */
+  interface ChartSpec {
+    /** 既定 "column" */
+    type?: ChartType;
+    data: readonly unknown[];
+    title?: string;
+    subtitle?: string;
+    /** 分類・X 軸の列（既定は先頭の列）。円・ドーナツでは扇の名前 */
+    x?: string | number;
+    /**
+     * 系列の列（文字列なら列名がそのまま凡例の名前）。既定は x 以外の数値の列すべて（円・ドーナツは最初の 1 つ）。
+     * { key, type: "line", axis: "y2" } で組み合わせグラフ・第 2 軸
+     */
+    y?: string | number | ChartSeries | (string | number | ChartSeries)[];
+    /** 積み上げ（"percent" は 100% 積み上げ）。column / bar / line / area */
+    stacked?: boolean | "percent";
+    axes?: { x?: ChartAxis; y?: ChartAxis; y2?: ChartAxis };
+    /** 凡例（既定は系列が 2 つ以上か円・ドーナツのとき下に表示） */
+    legend?: boolean | "top" | "bottom" | "left" | "right";
+    /** 系列の色（既定は Excel と同じ Office のテーマの色）。円・ドーナツでは扇の色 */
+    colors?: string[];
+    /** 値の表示書式（Excel の書式。"#,##0" "0.0%" "#,##0\"円\"" "yyyy/m/d" など）。軸の目盛り・ツールチップに使う */
+    format?: string;
+    /** 折れ線の点を表示するか（既定 true） */
+    markers?: boolean;
+    /** 円・ドーナツの扇の外に名前を出すか（既定 true）。true なら扇の中に値も出す */
+    labels?: boolean;
+    /** histogram の階級の数 */
+    bins?: number;
+    // ---- gantt（列の既定はその名前の列。なければ 名前/作業、開始/開始日、終了/終了日、進捗、前提 の列）
+    /** 作業名の列（既定 "name"。なければ先頭の列） */
+    name?: string | number;
+    /** 開始日の列（Date、"2026-04-01"、"2026/4/1 9:00"、Excel のシリアル値） */
+    start?: string | number;
+    /** 終了日の列。時刻のない日付はその日を含む（4/1〜4/3 は 3 日間）。省略すると開始日の 1 日 */
+    end?: string | number;
+    /** 進捗の列（0〜100。すべて 0〜1 なら割合とみなす） */
+    progress?: string | number;
+    /** 前提の作業の列（id 列の値か名前を「,」「、」区切りで。配列も可） */
+    dependencies?: string | number;
+    /** dependencies が指す id の列 */
+    id?: string | number;
+    /** 表示の単位（既定 "day"） */
+    view?: "day" | "week" | "month" | "year";
+    /** 表示の単位を切り替える選択を出すか（既定 true） */
+    viewSelect?: boolean;
+    /**
+     * バーのドラッグで日付（dates）・進捗（progress）を変えられるようにする（true は両方）。
+     * 変えた値は元の行に書き込まれ、onChange が呼ばれる
+     */
+    editable?: boolean | { dates?: boolean; progress?: boolean };
+    /** 休日として色を付ける日（Date か "2026-05-03"。{ date, name } なら名前も出す） */
+    holidays?: (Date | string | { date: Date | string; name?: string })[];
+    /** 土日に色を付けるか（既定 true） */
+    weekends?: boolean;
+    // ---- 共通
+    /** 点・棒・扇・作業がクリックされたとき（row は data の元の要素。series は系列の名前） */
+    onClick?(row: any, info: { index: number; series: string | null }): unknown;
+    /** ガントチャートで作業の日付・進捗が変えられたとき（row には書き込み済み） */
+    onChange?(row: any, changes: { start?: Date; end?: Date; progress?: number }, index: number): unknown;
+    /** ライブラリのオプション（AgChartOptions / Frappe Gantt の options）に重ねる値。JSON で表せるもののみ */
+    options?: Record<string, unknown>;
+  }
+
+  interface ChartSeries {
+    /** 値の列 */
+    key: string | number;
+    /** 凡例の名前（既定は key） */
+    label?: string;
+    /** この系列だけ種類を変える（組み合わせグラフ） */
+    type?: "column" | "bar" | "line" | "area" | "scatter";
+    /** "y2" で第 2 軸（右側） */
+    axis?: "y" | "y2";
+    color?: string;
+    /** この系列の値の書式（Excel の書式） */
+    format?: string;
+    /** bubble の大きさの列 */
+    size?: string | number;
+  }
+
+  interface ChartAxis {
+    title?: string;
+    /** 目盛りの書式（Excel の書式） */
+    format?: string;
+    min?: number | Date;
+    max?: number | Date;
+    /** 対数目盛り */
+    log?: boolean;
+  }
+
+  interface ChartWindowOptions {
+    /** ウィンドウのタイトル（既定はグラフの title → @title → スクリプト名） */
+    title?: string;
+    /** クライアント領域の幅・高さ（既定 900 x 560） */
+    width?: number;
+    height?: number;
+    resizable?: boolean;
+    titleBar?: "system" | "custom";
+    icon?: string;
+  }
+
+  /** グラフのウィンドウ */
+  interface ChartView {
+    /** ウィンドウが閉じられると解決する（コンソールではすぐ解決） */
+    readonly closed: Promise<void>;
+    close(): void;
+    /** グラフを変える。指定したキーだけが置き換わる（{ data: rows } で行だけ差し替え）。ExcelChart なら丸ごと置き換え */
+    update(spec: Partial<ChartSpec> | ExcelChart): this;
+  }
+
+  /** シート上の Excel のグラフ（sheet.charts）。toSpec() で ChartSpec にする */
+  interface ExcelChart {
+    readonly sheet: Worksheet;
+    /** グラフの名前（"グラフ 1" など） */
+    readonly name: string;
+    /** 置かれている範囲（"F2:N17"） */
+    readonly range: string | null;
+    readonly title: string;
+    /** 変換後の種類（表示できないグラフなら null） */
+    readonly type: ChartType | null;
+    /** 表示できるか（レーダー・株価・等高線、Excel 2016 以降の新しい種類は false） */
+    readonly supported: boolean;
+    /** 変換で省いたもの（3-D・近似曲線など）。表示できないグラフではその理由 */
+    readonly warnings: string[];
+    /**
+     * グラフの定義にする（呼ぶたびに新しい行を作る）。系列の値はセルから読む（読めなければグラフ内のキャッシュ）。
+     * 開始日の系列を塗りなしにした積み上げ横棒はガントチャートにする。gantt: true / false で強制・抑止
+     */
+    toSpec(options?: { gantt?: boolean }): ChartSpec;
   }
 
   // ------------------------------------------------------------------ app (HTML windows)
@@ -1057,6 +1214,8 @@ declare global {
     append(rows: Row[] | unknown[][], options?: WriteOptions): this;
     /** 使用範囲（例 "A1:D20"） */
     readonly dimension: string;
+    /** シート上の Excel のグラフ（開いたときのファイルにあったもの。値は読んだ時点のセルから） */
+    readonly charts: ExcelChart[];
     readonly rowCount: number;
     /** setColumnWidth("A", 20) / setColumnWidth("A:C", 12) */
     setColumnWidth(columns: string, width: number): this;

@@ -122,3 +122,6 @@ progress { width: 100%; height: 6px; margin: 6px 0; accent-color: var(--accent);
 #status.ok { color: var(--ok); }
 #status.error { color: var(--error); }
 .check .icon { margin-right: 0; }
+.fchart { border: 1px solid var(--border); border-radius: 4px; background: var(--panel); overflow: hidden; }
+.fchart.xljs-gantt { overflow: auto; }
+.fchart:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }

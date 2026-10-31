@@ -150,6 +150,7 @@
     if (!m || typeof m.xljs !== "string") return;
     switch (m.xljs) {
       case "init":
+        if (m.chart) chartConfig = m.chart;
         for (const k of Object.keys(store)) delete store[k];
         Object.assign(store, revive(m.state || {}));
         dom.clear();
@@ -462,6 +463,62 @@
     return null;
   }
 
+  // ------------------------------------------------------------ charts
+  //
+  // xljs.chart(el, spec): the same chart definitions as ui.chart, drawn by
+  // the built-in /_xljs/chart.js. Its handlers run here, on the page.
+
+  let chartConfig = { lang: "ja", texts: {} };
+  let chartLoading = null;
+  function loadCharts() {
+    if (!chartLoading) {
+      chartLoading = new Promise((ok, fail) => {
+        if (window.XljsChart) { ok(); return; }
+        const css = document.createElement("link");
+        css.rel = "stylesheet";
+        css.href = "/_xljs/chart.css";
+        document.head.append(css);
+        const s = document.createElement("script");
+        s.src = "/_xljs/chart.js";
+        s.onload = ok;
+        s.onerror = () => fail(new Error("cannot load chart.js"));
+        document.head.append(s);
+      }).then(() => window.XljsChart.load("/_xljs/"));
+    }
+    return chartLoading;
+  }
+
+  async function chart(target, spec) {
+    const el = typeof target === "string" ? document.querySelector(target) : target;
+    if (!el) throw new Error("xljs.chart: no element " + String(target));
+    await ready;
+    await loadCharts();
+    const C = window.XljsChart;
+    el.classList.add("xljs-chart");
+    let cur = spec, view = null;
+    const draw = () => {
+      const r = C.resolve(cur, chartConfig.texts);
+      const editable = cur.type === "gantt" && !!cur.editable;
+      if (view) view.destroy();
+      view = C.create(el, cur, {
+        lang: chartConfig.lang, texts: chartConfig.texts, height: el.clientHeight || undefined,
+        onClick: typeof cur.onClick === "function" ? (i, info) => cur.onClick(r.rows[i], Object.assign({ index: i }, info)) : null,
+        onChange: typeof cur.onChange === "function" || editable ? (i, changes) => {
+          // As with ui.chart, the changes are written into the row.
+          const row = r.rows[i];
+          if (row && typeof row === "object") for (const k of Object.keys(changes)) if (r[k] !== undefined) row[r[k]] = changes[k];
+          if (typeof cur.onChange === "function") cur.onChange(row, changes, i);
+        } : null,
+      });
+    };
+    draw();
+    return {
+      /** Changes the chart: the keys given replace those of the spec shown. */
+      update(s) { cur = Object.assign({}, cur, s); draw(); return this; },
+      destroy() { if (view) view.destroy(); view = null; },
+    };
+  }
+
   // ------------------------------------------------------------ xljs
 
   function invoke(name, ...args) {
@@ -499,6 +556,8 @@
     ready,
     /** Values of a form's controls, as data-action passes them. */
     formValues,
+    /** Draws a chart (the same definition as ui.chart) in an element; resolves with { update(spec), destroy() }. */
+    chart,
   });
   Object.defineProperty(window, "xljs", { value: xljs, enumerable: true });
 

@@ -9,6 +9,8 @@
 | `form-aggregate.js` | 入力フォーム（`ui.form`） | HTML なしのフォームで条件を入力し、開いたままのウィンドウで進捗・ログを表示しながら集計する（見出し付きのグループ・`onSubmit`・`remember`） |
 | `form-tabs-table.js` | 入力フォーム（`ui.form`） | タブで項目を切り替え、表から対象を選び、結果を表に表示する（`tabs`・`type: "table"`・`ctx.table`） |
 | `table-file-list.js` | 表表示（`ui.table`） | ファイル一覧を表で表示し、選んだファイルを処理する（`selectable`・`onDoubleClick`） |
+| `chart-sales.js` | グラフ（`ui.chart`） | Excel ブックのグラフをそのまま表示し、表から組み合わせグラフを作る（`sheet.charts`・`toSpec`・`onClick`） |
+| `chart-gantt.js` | ガントチャート | 工程表をフォームの中にガントチャートで表示し、ドラッグで変えた日付をブックに保存する（`type: "chart"`・`editable`・`holidays`） |
 | `app-hello/` | アプリ（HTML の画面） | 最小のアプリ。フォームの値を export した関数に渡し、結果を表示する（`@mode app`・`data-action`・`data-bind`） |
 | `app-aggregate/` | アプリ（HTML の画面） | フォルダ選択 → 集計 → 進捗 → 結果の表 → 保存。ドロップ・中止・画面の関数呼び出しも使う（`win.state`・`win.invoke`・`xljs.invoke`） |
 | `csv-to-xlsx.js` | CSV → Excel | CSV（Shift_JIS / UTF-8 自動判定）を Excel ブックに変換する |

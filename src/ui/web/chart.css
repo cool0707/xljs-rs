@@ -1,0 +1,20 @@
+/* Charts (chart.html, chart fields of forms, xljs.chart). */
+body.chart-page { margin: 0; height: 100vh; display: flex; flex-direction: column; background: var(--panel); }
+body.chart-page .xljs-chart { flex: 1; min-height: 0; padding: 8px; box-sizing: border-box; }
+.xljs-chart { position: relative; }
+.xljs-chart.xljs-gantt { overflow: auto; }
+.xljs-chart-empty { color: var(--muted); padding: 24px; text-align: center; }
+body.chart-page #error { margin: 8px 12px; }
+/* Frappe Gantt in the pages' fonts and colors. */
+.xljs-gantt .gantt-container { font-family: var(--font, "Yu Gothic UI", "Meiryo UI", "Segoe UI", system-ui, sans-serif); --g-weekend-highlight-color: #f3f3f3; --g-bar-color: #bdd7ee; --g-bar-border: #4472c4; --g-progress-color: #4472c4; }
+.xljs-gantt .gantt-container .popup-wrapper { font-family: inherit; }
+@media (prefers-color-scheme: dark) {
+  .xljs-gantt .gantt-container {
+    --g-arrow-color: #e5e5e5; --g-bar-color: #1f4e79; --g-bar-border: #5b9bd5; --g-progress-color: #5b9bd5;
+    --g-tick-color-thick: #474747; --g-tick-color: #383838; --g-actions-background: #383838; --g-border-color: #474747;
+    --g-text-muted: #ababab; --g-text-light: #ffffff; --g-text-dark: #f3f3f3; --g-handle-color: #d0d0d0;
+    --g-weekend-label-color: #474747; --g-expected-progress: #5a5a5a; --g-header-background: #2b2b2b;
+    --g-row-color: #2b2b2b; --g-row-border-color: #383838; --g-today-highlight: #ababab; --g-popup-actions: #383838;
+    --g-weekend-highlight-color: #333333;
+  }
+}

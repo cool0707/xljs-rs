@@ -34,6 +34,8 @@ pub struct Book {
     pub default_font: (String, f64),
     /// Whether the default font must be written into styles.xml on save.
     pub font_changed: bool,
+    /// The parts of the file with its charts (None for a new workbook).
+    pub charts: Option<super::xlsx_chart::ChartParts>,
 }
 
 pub(crate) fn zerr(e: impl std::fmt::Display) -> Error {
@@ -48,7 +50,7 @@ impl Book {
     fn new(wb: Workbook, path: String, styles_xml: Option<&[u8]>) -> Book {
         let default_font = styles_xml.and_then(first_font).unwrap_or(("Calibri".into(), 11.0));
         let date1904 = false; // see read_date1904
-        Book { wb, path, date1904, fresh: false, formulas: false, closed: false, default_font, font_changed: false }
+        Book { wb, path, date1904, fresh: false, formulas: false, closed: false, default_font, font_changed: false, charts: None }
     }
 
     pub fn sheet(&self, name: &str) -> Result<&Worksheet> {
@@ -160,6 +162,7 @@ pub fn open_bytes(data: &[u8], path: String) -> Result<Book> {
     let styles = zip_part(data, "xl/styles.xml");
     let mut b = Book::new(wb, path, styles.as_deref());
     b.date1904 = read_date1904(data);
+    b.charts = Some(super::xlsx_chart::ChartParts::collect(data));
     Ok(b)
 }
 
@@ -573,6 +576,14 @@ pub(super) fn install(n: &N) {
             b.font_changed = true;
         }
         track(h, &a.ctx, b)
+    });
+    n.set("xlsxCharts", |h, a| {
+        let sheet = a.str(1);
+        let charts = with_book(h, a, |b| {
+            b.sheet(&sheet).map_err(|e| a.throw(&e))?;
+            Ok(super::xlsx_chart::sheet_charts(b, &sheet))
+        })?;
+        a.ret(serde_json::Value::Array(charts).to_string())
     });
     n.set("xlsxPath", |h, a| {
         let p = with_book(h, a, |b| Ok(b.path.clone()))?;

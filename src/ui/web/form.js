@@ -19,6 +19,7 @@ let ran = false;
 let noSubmit = false;
 let extraButtons = []; // the form's buttons (beside the submit button)
 let seq = 0; // the last value set by the script (ctx.setValue) applied here; sent back with the values
+let chartTexts = {}, lang = "ja"; // for chart fields (chart.js)
 const controls = new Map(); // name -> { field, row, get(), set(value, append), focus() }
 
 host.on((m) => {
@@ -34,6 +35,7 @@ host.on((m) => {
     }
     case "fieldError": { const c = controls.get(m.field); if (c) { setError(c, m.error || ""); markTabs(); } break; }
     case "table": { const c = controls.get(m.field); if (c && c.setTable) c.setTable(m); break; }
+    case "chart": { const c = controls.get(m.field); if (c && c.setChart) c.setChart(m); break; }
     case "cellErrors": { const c = controls.get(m.field); if (c && c.setCellErrors) c.setCellErrors(m.errors || [], m.row); break; }
     case "running": startRun(m); break;
     case "progress": progress(m); break;
@@ -45,6 +47,8 @@ host.on((m) => {
 function init(m) {
   texts = m.texts || {};
   fields = m.fields || [];
+  chartTexts = m.chartTexts || {};
+  lang = m.lang || "ja";
   if (m.description) {
     $("description").textContent = m.description;
     $("description").hidden = false;
@@ -82,7 +86,7 @@ function init(m) {
     startGroups(i);
     const id = "f" + i;
     const c = buildControl(f, id);
-    const wide = f.type === "table" ? " wide" : "";
+    const wide = f.type === "table" || f.type === "chart" ? " wide" : "";
     const label = el("label", { className: "lbl" + wide, htmlFor: id }, ...(f.type === "checkbox" ? [] : withIcon(f.icon, f.label)));
     if (f.required && f.type !== "checkbox") label.append(el("span", { className: "req", textContent: "*" }));
     if (f.tooltip) label.title = c.node.title = f.tooltip;
@@ -99,7 +103,7 @@ function init(m) {
   startGroups(fields.length);
   setState("input");
   if (tabButtons.length) showTab(0, false);
-  const first = fields.find((f) => f.type !== "checkbox" && f.type !== "radio" && f.type !== "table" && !(f.tab > 0));
+  const first = fields.find((f) => f.type !== "checkbox" && f.type !== "radio" && f.type !== "table" && f.type !== "chart" && !(f.tab > 0));
   if (first) controls.get(first.name).focus();
   host.send({ type: "shown" });
 }
@@ -221,6 +225,8 @@ function buildControl(f, id) {
     }
     case "table":
       return tableControl(f, id);
+    case "chart":
+      return chartControl(f, id);
     default: {
       const i = input("text", f, id);
       return { node: i, inputs: [i], get: () => i.value, set: (v) => { i.value = v ?? ""; }, focus: () => i.focus() };
@@ -471,6 +477,51 @@ function tableControl(f, id) {
   return control;
 }
 
+// ---- chart fields: drawn by chart.js (the libraries are loaded with the first chart).
+// Clicks and edits of a Gantt chart go to the script, which runs the spec's onClick / onChange.
+
+/** Dates for the script: { $date: ms }. */
+const wireDates = (o) => {
+  const out = {};
+  for (const [k, v] of Object.entries(o || {})) out[k] = v instanceof Date ? { $date: v.getTime() } : v;
+  return out;
+};
+
+function chartControl(f, id) {
+  const box = el("div", { className: "xljs-chart fchart", id, tabIndex: -1 });
+  const height = (f.chart && f.chart.height) || 300;
+  box.style.height = height + "px";
+  let view = null, current = f.chart, failed = false;
+  function draw() {
+    const c = current;
+    XljsChart.load().then(() => {
+      if (c !== current) return;
+      if (view) view.destroy();
+      view = null;
+      try {
+        view = XljsChart.create(box, XljsChart.revive(c.spec), {
+          lang, texts: chartTexts, height: height - 2,
+          onClick: c.click ? (index, info) => host.send({ type: "chartClick", field: f.name, index, series: info.series ?? null }) : null,
+          onChange: c.change ? (index, changes) => host.send({ type: "chartChange", field: f.name, index, changes: wireDates(changes) }) : null,
+        });
+        if (failed) { setError(control, ""); failed = false; }
+      } catch (e) {
+        failed = true;
+        setError(control, e.message);
+      }
+    }, (e) => { failed = true; setError(control, e.message); });
+  }
+  const control = {
+    node: box, inputs: [],
+    get: () => null, set: () => {},
+    setChart: (m) => { current = m; draw(); },
+    focus: () => box.focus(),
+  };
+  // Drawn once the field is on the page (it needs its size).
+  requestAnimationFrame(draw);
+  return control;
+}
+
 function pick(f, current) {
   if (state !== "input") return;
   host.send({ type: "pick", field: f.name, value: current });
@@ -519,6 +570,7 @@ function liveCheck(name, now, change) {
 
 function watch(c) {
   const name = c.field.name;
+  if (c.field.type === "chart") return;
   if (c.field.type === "table") {
     c.onChange = () => { if (!c.err.hidden || c.field.change) liveCheck(name, true, true); };
     return;
