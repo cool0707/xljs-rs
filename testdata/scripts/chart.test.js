@@ -38,8 +38,10 @@ equal(col.range, "F2"); // openpyxl writes one-cell anchors (Excel: "F2:N17")
 const s = col.toSpec();
 deepEqual(s.data, [{ 月: "4月", 売上: 1200, 原価: 800 }, { 月: "5月", 売上: 1500, 原価: 900 }, { 月: "6月", 売上: 900, 原価: 700 }]);
 equal(s.x, "月");
-// The format of the values: the cells' (原価 has none).
-deepEqual(s.y, [{ key: "売上", color: "#1F4E79", format: '#,##0"円"' }, { key: "原価" }]);
+// The format of the values: the cells' (原価 has none). A series without a
+// color of its own gets the automatic color from the workbook's theme
+// (openpyxl writes the Office 2007 theme: accent2 is #C0504D).
+deepEqual(s.y, [{ key: "売上", color: "#1F4E79", format: '#,##0"円"' }, { key: "原価", color: "#C0504D" }]);
 deepEqual(s.axes, { x: { title: "月" }, y: { title: "金額", format: '#,##0"円"' } });
 ok(s.data !== col.toSpec().data, "new rows each time");
 
@@ -62,6 +64,7 @@ deepEqual(pi.colors, ["#C00000", "#00B050", "#0070C0"]);
 equal(pi.title, "売上の内訳");
 equal(donut.type, "donut");
 equal(donut.title, "原価", "auto title of one series");
+deepEqual(donut.toSpec().colors, ["#4F81BD", "#C0504D", "#9BBB59"], "slices: the theme's accents");
 equal(area.toSpec().stacked, true);
 equal(d3.type, "column");
 deepEqual(d3.warnings, ["3-D グラフは平面で表示します"]);
@@ -71,6 +74,8 @@ ok(/レーダーチャート/.test(radar.warnings[0]), radar.warnings[0]);
 throws(() => radar.toSpec(), /レーダーチャートは表示できません/);
 throws(() => ui.chart(radar), /レーダー/);
 equal(line.toSpec().markers, false);
+// The chart's color style (colors1.xml, "Change Colors"): accent6, then accent5.
+deepEqual(line.toSpec().y.map((y) => y.color), ["#F79646", "#4BACC6"]);
 equal(line.toSpec().axes.y.format, "#,##0");
 ui.chart(col); // an ExcelChart as is
 
@@ -80,7 +85,7 @@ equal(sc.type, "scatter");
 deepEqual(sc.data, [{ x: 1, y: 2 }, { x: 2, y: 5 }, { x: 3, y: 3 }]);
 const bu = bubble.toSpec();
 equal(bu.type, "bubble");
-deepEqual(bu.y, [{ key: "泡", size: "泡 (大きさ)" }]);
+deepEqual(bu.y, [{ key: "泡", color: "#4F81BD", size: "泡 (大きさ)" }]);
 deepEqual(bu.data[1], { x: 2, 泡: 5, "泡 (大きさ)": 30 });
 
 // Stacked horizontal bars with an unfilled first series: a Gantt chart.

@@ -431,10 +431,9 @@ fn text_of(b: &Book, tx: &Node) -> Option<String> {
 
 // ---- colors ----
 
-/// A color of a fill (a:solidFill and the like) as "#RRGGBB".
-fn color_of(fill: &Node, theme: &HashMap<String, String>) -> Option<String> {
-    let c = fill.children.iter().find(|c| matches!(c.name.as_str(), "srgbClr" | "schemeClr" | "sysClr" | "prstClr"))?;
-    let base = match c.name.as_str() {
+/// A color element (a:srgbClr, a:schemeClr, a:sysClr) as RRGGBB, before its modifiers.
+fn base_color(c: &Node, theme: &HashMap<String, String>) -> Option<String> {
+    Some(match c.name.as_str() {
         "srgbClr" => c.attr("val")?.to_uppercase(),
         "sysClr" => c.attr("lastClr")?.to_uppercase(),
         "schemeClr" => {
@@ -448,29 +447,146 @@ fn color_of(fill: &Node, theme: &HashMap<String, String>) -> Option<String> {
             theme.get(name).cloned().or_else(|| office_color(name).map(str::to_string))?
         }
         _ => return None,
+    })
+}
+
+/// The color modifiers among the children of n (lumMod, lumOff, shade, tint) as fractions.
+fn mods_of(n: &Node) -> Vec<(String, f64)> {
+    n.children
+        .iter()
+        .filter(|c| matches!(c.name.as_str(), "lumMod" | "lumOff" | "shade" | "tint"))
+        .filter_map(|c| Some((c.name.clone(), c.attr("val")?.parse::<f64>().ok()? / 100000.0)))
+        .collect()
+}
+
+/// rgb (RRGGBB) with modifiers applied, as "#RRGGBB". lumMod / lumOff work
+/// on the luminance (HSL), as Office does; shade / tint darken and lighten.
+fn modified(rgb: &str, mods: &[(String, f64)]) -> Option<String> {
+    let v = u32::from_str_radix(rgb, 16).ok()?;
+    let (mut r, mut g, mut b) = (((v >> 16) & 255) as f64 / 255.0, ((v >> 8) & 255) as f64 / 255.0, (v & 255) as f64 / 255.0);
+    let get = |k: &str| mods.iter().find(|(n, _)| n == k).map(|(_, x)| *x);
+    if get("lumMod").is_some() || get("lumOff").is_some() {
+        let (h, s, l) = to_hsl(r, g, b);
+        let l = (l * get("lumMod").unwrap_or(1.0) + get("lumOff").unwrap_or(0.0)).clamp(0.0, 1.0);
+        (r, g, b) = from_hsl(h, s, l);
+    }
+    if let Some(x) = get("shade") {
+        (r, g, b) = (r * x, g * x, b * x);
+    }
+    if let Some(x) = get("tint") {
+        (r, g, b) = (1.0 - (1.0 - r) * x, 1.0 - (1.0 - g) * x, 1.0 - (1.0 - b) * x);
+    }
+    let f = |v: f64| (v * 255.0).round().clamp(0.0, 255.0) as u8;
+    Some(format!("#{:02X}{:02X}{:02X}", f(r), f(g), f(b)))
+}
+
+fn to_hsl(r: f64, g: f64, b: f64) -> (f64, f64, f64) {
+    let (max, min) = (r.max(g).max(b), r.min(g).min(b));
+    let l = (max + min) / 2.0;
+    if max == min {
+        return (0.0, 0.0, l);
+    }
+    let d = max - min;
+    let s = if l > 0.5 { d / (2.0 - max - min) } else { d / (max + min) };
+    let h = if max == r {
+        (g - b) / d + if g < b { 6.0 } else { 0.0 }
+    } else if max == g {
+        (b - r) / d + 2.0
+    } else {
+        (r - g) / d + 4.0
     };
-    let rgb = u32::from_str_radix(&base, 16).ok()?;
-    let (mut r, mut g, mut bl) = (((rgb >> 16) & 255) as f64, ((rgb >> 8) & 255) as f64, (rgb & 255) as f64);
-    // lumMod / lumOff / shade / tint, as Office applies them (approximately, in RGB).
-    let pct = |n: &str| c.child(n).and_then(|x| x.attr("val")).and_then(|v| v.parse::<f64>().ok()).map(|v| v / 100000.0);
-    if let Some(m) = pct("lumMod") {
-        let off = pct("lumOff").unwrap_or(0.0) * 255.0;
-        r = r * m + off;
-        g = g * m + off;
-        bl = bl * m + off;
+    (h / 6.0, s, l)
+}
+
+fn from_hsl(h: f64, s: f64, l: f64) -> (f64, f64, f64) {
+    if s == 0.0 {
+        return (l, l, l);
     }
-    if let Some(s) = pct("shade") {
-        r *= s;
-        g *= s;
-        bl *= s;
+    let q = if l < 0.5 { l * (1.0 + s) } else { l + s - l * s };
+    let p = 2.0 * l - q;
+    let hue = |mut t: f64| {
+        if t < 0.0 {
+            t += 1.0;
+        }
+        if t > 1.0 {
+            t -= 1.0;
+        }
+        if t < 1.0 / 6.0 {
+            p + (q - p) * 6.0 * t
+        } else if t < 0.5 {
+            q
+        } else if t < 2.0 / 3.0 {
+            p + (q - p) * (2.0 / 3.0 - t) * 6.0
+        } else {
+            p
+        }
+    };
+    (hue(h + 1.0 / 3.0), hue(h), hue(h - 1.0 / 3.0))
+}
+
+/// A color of a fill (a:solidFill and the like) as "#RRGGBB".
+fn color_of(fill: &Node, theme: &HashMap<String, String>) -> Option<String> {
+    let c = fill.children.iter().find(|c| matches!(c.name.as_str(), "srgbClr" | "schemeClr" | "sysClr" | "prstClr"))?;
+    modified(&base_color(c, theme)?, &mods_of(c))
+}
+
+/// The automatic colors of a chart's series and points, as Excel 2013 and
+/// later picks them: the chart's color style (xl/charts/colorsN.xml, the
+/// palette chosen with "Change Colors") or else the theme's accent1 to
+/// accent6. After the last color they repeat with the next variation
+/// (darker, lighter, ...). Monochrome styles are read the same way, which
+/// is close to (not exactly) what Excel shows.
+struct AutoColors {
+    colors: Vec<String>,
+    variations: Vec<Vec<(String, f64)>>,
+}
+
+impl AutoColors {
+    fn new(parts: &ChartParts, chart_part: &str, theme: &HashMap<String, String>) -> AutoColors {
+        let style = parts
+            .rels(chart_part)
+            .into_values()
+            .find(|(t, _)| t.ends_with("/chartColorStyle"))
+            .and_then(|(_, p)| parts.xml(&p));
+        if let Some(st) = style {
+            let colors: Vec<String> = st
+                .children
+                .iter()
+                .filter(|c| matches!(c.name.as_str(), "srgbClr" | "schemeClr" | "sysClr"))
+                .filter_map(|c| modified(&base_color(c, theme)?, &mods_of(c)).map(|x| x[1..].to_string()))
+                .collect();
+            if !colors.is_empty() {
+                return AutoColors { colors, variations: st.all("variation").map(mods_of).collect() };
+            }
+        }
+        // Office's default color style (colors1.xml of a new chart).
+        let m = |v: &[(&str, f64)]| v.iter().map(|(k, x)| (k.to_string(), *x)).collect::<Vec<_>>();
+        AutoColors {
+            colors: (1..=6).map(|i| format!("accent{i}")).filter_map(|a| theme.get(&a).cloned().or_else(|| office_color(&a).map(str::to_string))).collect(),
+            variations: vec![
+                vec![],
+                m(&[("lumMod", 0.6)]),
+                m(&[("lumMod", 0.8), ("lumOff", 0.2)]),
+                m(&[("lumMod", 0.8)]),
+                m(&[("lumMod", 0.6), ("lumOff", 0.4)]),
+                m(&[("lumMod", 0.5)]),
+                m(&[("lumMod", 0.7), ("lumOff", 0.3)]),
+                m(&[("lumMod", 0.7)]),
+                m(&[("lumMod", 0.5), ("lumOff", 0.5)]),
+            ],
+        }
     }
-    if let Some(t) = pct("tint") {
-        r = 255.0 - (255.0 - r) * t;
-        g = 255.0 - (255.0 - g) * t;
-        bl = 255.0 - (255.0 - bl) * t;
+
+    /// The color of the i-th series (its c:idx) or point.
+    fn nth(&self, i: usize) -> Option<String> {
+        let n = self.colors.len();
+        if n == 0 {
+            return None;
+        }
+        let none = Vec::new();
+        let var = if self.variations.is_empty() { &none } else { &self.variations[(i / n) % self.variations.len()] };
+        modified(&self.colors[i % n], var)
     }
-    let f = |v: f64| v.round().clamp(0.0, 255.0) as u8;
-    Some(format!("#{:02X}{:02X}{:02X}", f(r), f(g), f(bl)))
 }
 
 /// Office's default theme (when the workbook has none).
@@ -509,7 +625,7 @@ const GROUPS: &[&str] = &[
     "areaChart", "area3DChart", "scatterChart", "bubbleChart", "radarChart", "stockChart", "surfaceChart", "surface3DChart",
 ];
 
-fn chart_json(b: &Book, root: &Node, theme: &HashMap<String, String>) -> Map<String, J> {
+fn chart_json(b: &Book, root: &Node, theme: &HashMap<String, String>, auto: &AutoColors) -> Map<String, J> {
     let mut out = Map::new();
     let Some(chart) = root.child("chart") else { return out };
     if let Some(t) = chart.child("title") {
@@ -532,6 +648,12 @@ fn chart_json(b: &Book, root: &Node, theme: &HashMap<String, String>) -> Map<Str
             let (mut color, no_fill) = shape(s.child("spPr"), line, theme);
             if color.is_none() && line {
                 color = shape(s.path(&["marker", "spPr"]), false, theme).0;
+            }
+            // No color of its own: the automatic color of its index (a line
+            // without its line still has its markers in that color).
+            if color.is_none() && (!no_fill || line) {
+                let idx = s.val("idx").and_then(|v| v.parse::<usize>().ok()).unwrap_or(series.len());
+                color = auto.nth(idx);
             }
             if let Some(c) = color {
                 o.insert("color".into(), J::String(c));
@@ -577,6 +699,8 @@ fn chart_json(b: &Book, root: &Node, theme: &HashMap<String, String>) -> Map<Str
         groups.push(J::Object(o));
     }
     out.insert("groups".into(), J::Array(groups));
+    // The automatic colors of points (pies whose slices have no color of their own).
+    out.insert("autoColors".into(), J::Array((0..64).filter_map(|i| auto.nth(i)).map(J::String).collect()));
     let mut axes = Vec::new();
     for a in plot.children.iter().filter(|c| matches!(c.name.as_str(), "catAx" | "dateAx" | "valAx" | "serAx")) {
         let mut o = Map::new();
@@ -651,7 +775,7 @@ pub fn sheet_charts(b: &Book, sheet: &str) -> Vec<J> {
                 m.insert("chartEx".into(), J::String(chart_ex_kind(&root)));
                 m
             } else {
-                chart_json(b, &root, &theme)
+                chart_json(b, &root, &theme, &AutoColors::new(parts, part, &theme))
             };
             let name = frame.path(&["nvGraphicFramePr", "cNvPr"]).and_then(|c| c.attr("name")).unwrap_or("");
             o.insert("name".into(), J::String(name.to_string()));
@@ -660,4 +784,26 @@ pub fn sheet_charts(b: &Book, sheet: &str) -> Vec<J> {
         }
     }
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn color_modifiers() {
+        let m = |v: &[(&str, f64)]| v.iter().map(|(k, x)| (k.to_string(), *x)).collect::<Vec<_>>();
+        // As Excel shows them (Office 2013+ theme): accent1 darker 40% / lighter 40%, accent2 darker 25%.
+        assert_eq!(modified("4472C4", &m(&[("lumMod", 0.6)])).unwrap(), "#264478");
+        assert_eq!(modified("4472C4", &m(&[("lumMod", 0.6), ("lumOff", 0.4)])).unwrap(), "#8FAADC");
+        assert_eq!(modified("ED7D31", &m(&[("lumMod", 0.75)])).unwrap(), "#C55A11");
+        assert_eq!(modified("70AD47", &[]).unwrap(), "#70AD47");
+    }
+
+    #[test]
+    fn default_auto_colors() {
+        let a = AutoColors::new(&ChartParts::default(), "xl/charts/chart1.xml", &HashMap::new());
+        let got: Vec<String> = [0, 1, 5, 6, 12].iter().map(|i| a.nth(*i).unwrap()).collect();
+        assert_eq!(got, ["#4472C4", "#ED7D31", "#70AD47", "#264478", "#698ED0"]);
+    }
 }

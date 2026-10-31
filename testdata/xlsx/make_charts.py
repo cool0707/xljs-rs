@@ -113,4 +113,23 @@ def gantt():
     return c
 g.add_chart(gantt(), "E2")
 
-wb.save(os.path.join(os.path.dirname(os.path.abspath(__file__)), "charts.xlsx"))
+out = os.path.join(os.path.dirname(os.path.abspath(__file__)), "charts.xlsx")
+wb.save(out)
+
+# The line chart ("折れ線", chart9) gets a color style as Excel writes for
+# "Change Colors" (openpyxl writes none): accent6, accent5, then darker.
+import shutil, zipfile
+COLORS = """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<cs:colorStyle xmlns:cs="http://schemas.microsoft.com/office/drawing/2012/chartStyle" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" meth="cycle" id="15"><a:schemeClr val="accent6"/><a:schemeClr val="accent5"/><cs:variation/><cs:variation><a:lumMod val="60000"/></cs:variation></cs:colorStyle>"""
+RELS = """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.microsoft.com/office/2011/relationships/chartColorStyle" Target="colors1.xml"/></Relationships>"""
+tmp = out + ".tmp"
+with zipfile.ZipFile(out) as zin, zipfile.ZipFile(tmp, "w", zipfile.ZIP_DEFLATED) as zout:
+    for item in zin.infolist():
+        data = zin.read(item.filename)
+        if item.filename == "[Content_Types].xml":
+            data = data.replace(b"</Types>", b'<Override PartName="/xl/charts/colors1.xml" ContentType="application/vnd.ms-office.chartcolorstyle+xml"/></Types>')
+        zout.writestr(item, data)
+    zout.writestr("xl/charts/colors1.xml", COLORS)
+    zout.writestr("xl/charts/_rels/chart9.xml.rels", RELS)
+shutil.move(tmp, out)

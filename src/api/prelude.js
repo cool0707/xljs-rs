@@ -2869,7 +2869,9 @@
       spec.x = kx;
       spec.y = [Object.assign({ key: ky }, s.val && s.val.format ? { format: s.val.format } : {})];
       const pts = new Map((s.points || []).filter((p) => p.color).map((p) => [p.idx, p.color]));
-      if (pts.size) spec.colors = Array.from({ length: n }, (_, i) => pts.get(i) || OFFICE_COLORS[i % OFFICE_COLORS.length]);
+      // Slices without a color of their own: the chart's automatic colors (from the workbook's theme).
+      const auto = Array.isArray(raw.autoColors) && raw.autoColors.length ? raw.autoColors : OFFICE_COLORS;
+      if (pts.size || first.varyColors !== false) spec.colors = Array.from({ length: n }, (_, i) => pts.get(i) || auto[i % auto.length]);
       return { spec, warnings };
     }
 
