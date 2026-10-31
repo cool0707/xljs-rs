@@ -783,6 +783,8 @@
     script: native.script,
     scriptDir: native.pathDirname(native.script),
     platform: native.platform,
+    computerName: native.computerName,
+    userName: native.userName,
     ui: native.uiName,
     title: native.title,
     exit: (code = 0) => native.exit(code),

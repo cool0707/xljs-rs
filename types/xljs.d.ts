@@ -17,6 +17,10 @@ declare global {
     readonly scriptDir: string;
     /** "windows" / "linux" / "darwin" */
     readonly platform: string;
+    /** このコンピューターの名前（%COMPUTERNAME% と同じ。AD がなくても使える） */
+    readonly computerName: string;
+    /** スクリプトを実行しているユーザーのログオン名（ドメイン名なし。%USERNAME% と同じ） */
+    readonly userName: string;
     /** 使用中の UI: "native" / "console" / "mock" */
     readonly ui: string;
     /** ダイアログのタイトル（既定はスクリプト名） */

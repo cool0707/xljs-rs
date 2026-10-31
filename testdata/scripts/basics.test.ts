@@ -61,4 +61,9 @@ equal(xljs.inspect({ a: 1, b: "x" }), '{ a: 1, b: "x" }');
 equal(xljs.inspect([1, "a", null, undefined]), '[ 1, "a", null, undefined ]');
 equal(xljs.inspect(new Date(2026, 3, 1, 9, 5, 0)), "2026-04-01 09:05:00");
 
+// The computer and user names (the same as the environment variables on Windows).
+ok(typeof xljs.computerName === "string" && xljs.computerName.length > 0);
+ok(typeof xljs.userName === "string");
+if (xljs.platform === "windows") equal(xljs.userName.toLowerCase(), String(xljs.env("USERNAME")).toLowerCase());
+
 console.log("basics ok");

@@ -115,6 +115,7 @@ description: xljs（Excel・CSV・JSON を JavaScript で処理する Windows �
 | API | 説明 |
 |---|---|
 | `ad.available()` | ドメインに参加しているか |
+| `xljs.computerName` / `xljs.userName` | コンピューター名 / ログオン中のユーザー名（AD なしでも使える） |
 | `ad.me()` / `ad.computer()` | 自分 / このコンピューター |
 | `ad.get(id)` | 1 件（ログオン名・識別名・UPN・メール・SID・名前。なければ `null`） |
 | `ad.search("山田*")` | 名前・ログオン名・表示名・メールで検索（既定はユーザー） |
