@@ -15,6 +15,37 @@ Add-Type -Namespace XljsGui -Name Native -MemberDefinition @'
 [DllImport("user32.dll")] public static extern bool SetProcessDpiAwarenessContext(System.IntPtr v);
 public struct RECT { public int Left, Top, Right, Bottom; }
 '@
+# 既定の再生デバイスのミュート（Core Audio の IAudioEndpointVolume）
+Add-Type -TypeDefinition @'
+using System;
+using System.Runtime.InteropServices;
+namespace XljsGui {
+  [Guid("5CDF2C82-841E-4546-9722-0CF74078229A"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+  interface IAudioEndpointVolume {
+    int f(); int g(); int h(); int i(); int j(); int k(); int l(); int m(); int n(); int o(); int p();
+    int SetMute([MarshalAs(UnmanagedType.Bool)] bool mute, ref Guid ctx);
+    int GetMute([MarshalAs(UnmanagedType.Bool)] out bool mute);
+  }
+  [Guid("D666063F-1587-4E43-81F1-B948E807363F"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+  interface IMMDevice { int Activate(ref Guid id, int clsCtx, IntPtr p, [MarshalAs(UnmanagedType.IUnknown)] out object o); }
+  [Guid("A95664D2-9614-4F35-A746-DE8DB63617E6"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+  interface IMMDeviceEnumerator { int f(); int GetDefaultAudioEndpoint(int flow, int role, out IMMDevice dev); }
+  [ComImport, Guid("BCDE0395-E52F-467C-8E3D-C4579291692E")] class MMDeviceEnumerator { }
+  public static class Audio {
+    static IAudioEndpointVolume Vol() {
+      var e = (IMMDeviceEnumerator)new MMDeviceEnumerator();
+      IMMDevice d; Marshal.ThrowExceptionForHR(e.GetDefaultAudioEndpoint(0, 1, out d));  // eRender, eMultimedia
+      var iid = typeof(IAudioEndpointVolume).GUID; object o;
+      Marshal.ThrowExceptionForHR(d.Activate(ref iid, 23, IntPtr.Zero, out o));         // CLSCTX_ALL
+      return (IAudioEndpointVolume)o;
+    }
+    public static bool Mute {
+      get { bool m; Marshal.ThrowExceptionForHR(Vol().GetMute(out m)); return m; }
+      set { var g = Guid.Empty; Marshal.ThrowExceptionForHR(Vol().SetMute(value, ref g)); }
+    }
+  }
+}
+'@
 # 物理ピクセルで座標を扱う（150% などの拡大率でも撮影範囲がずれないように）
 [void][XljsGui.Native]::SetProcessDpiAwarenessContext([IntPtr]-4)
 
@@ -199,5 +230,17 @@ function Stop-XljsAwake {
     if ($script:AwakeJob) { $script:AwakeJob.WaitForExit(10000) | Out-Null; $script:AwakeJob = $null }
 }
 
-Export-ModuleMember -Function Wait-Until, Save-XljsScreenshot, Get-XljsWindow, Show-XljsUiTree, Find-XljsElement, Invoke-XljsElement,
+<#
+.SYNOPSIS テスト中だけ音を消す（MessageBox などの通知音が鳴るため）。Start で元の状態を覚えて、Stop で戻す。
+既定の再生デバイスのミュートを切り替える。再生デバイスがない PC では何もしない。
+#>
+function Start-XljsMute {
+    try { $script:MuteWas = [XljsGui.Audio]::Mute; [XljsGui.Audio]::Mute = $true }
+    catch { $script:MuteWas = $null; Write-Warning "mute: $($_.Exception.Message)" }
+}
+function Stop-XljsMute {
+    if ($null -ne $script:MuteWas) { [XljsGui.Audio]::Mute = $script:MuteWas; $script:MuteWas = $null }
+}
+
+Export-ModuleMember -Function Start-XljsMute, Stop-XljsMute, Wait-Until, Save-XljsScreenshot, Get-XljsWindow, Show-XljsUiTree, Find-XljsElement, Invoke-XljsElement,
     Set-XljsText, Get-XljsText, Close-XljsWindow, Submit-XljsFileDialog, Start-XljsAwake, Stop-XljsAwake

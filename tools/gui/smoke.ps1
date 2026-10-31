@@ -58,6 +58,7 @@ mk("$js/data/sub/b.xlsx", [{顧客名:"山田商事",金額:300},{顧客名:"鈴
 if ($rc -ne 0) { throw "test data generation failed (exit $rc)" }
 
 if ($MonitorOff) { Start-XljsAwake -Minutes 30 -MonitorOff | Out-Null }
+Start-XljsMute   # alert などの通知音を止める（終わったら元のミュート状態に戻す）
 try {
     # 引数なし → 開始画面（Win32 のボタン。UIA では Pane に見えるので BM_CLICK で押す）
     Test-Case launch-screen {
@@ -147,6 +148,7 @@ if (JSON.stringify(b.sheets["集計"].toObjects()) !== '[{"商品名":"(未設�
         Wait-Exit $p
     }
 } finally {
+    Stop-XljsMute
     if ($MonitorOff) { Stop-XljsAwake }
 }
 

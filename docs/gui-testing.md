@@ -34,12 +34,13 @@ pwsh -File tools/gui/smoke.ps1 -MonitorOff         # スモークテスト一式
 ```powershell
 Import-Module ./tools/gui/XljsGui.psm1
 Start-XljsAwake -Minutes 30 -MonitorOff           # スリープ・ロック防止＋画面だけ消す
+Start-XljsMute                                     # 通知音を止める（利用者の要望。終わったら Stop-XljsMute）
 $p = Start-Process ./target/debug/xljs.exe -ArgumentList '--lang=ja', 'examples/form-aggregate.js' -PassThru
 $w = Get-XljsWindow -ProcessId $p.Id -Name '売上集計'   # 出るまで待つ
 Show-XljsUiTree $w                                 # 何が操作できるか（種別・クラス・id・名前・パターン）
 Find-XljsElement -Root $w -AutomationId submit | Invoke-XljsElement
 Save-XljsScreenshot "$env:TEMP\shot.png" -Window $w
-Stop-XljsAwake
+Stop-XljsMute; Stop-XljsAwake
 ```
 
 | 関数 | 内容 |
@@ -53,6 +54,7 @@ Stop-XljsAwake
 | `Close-XljsWindow` | 閉じる（WindowPattern、なければ `WM_CLOSE`） |
 | `Save-XljsScreenshot -Path [-Window]` | 画面全体またはウィンドウを PNG に |
 | `Start-XljsAwake` / `Stop-XljsAwake` | `stay-awake.ps1` をバックグラウンドで起動／停止 |
+| `Start-XljsMute` / `Stop-XljsMute` | 既定の再生デバイスをミュートし、終わったら元の状態に戻す。alert などの通知音が鳴るので、操作するときは必ず使う（`smoke.ps1` は常に使う） |
 | `Wait-Until { ... }` | 条件が真になるまで待つ |
 
 ## スモークテストで確認していること（tools/gui/smoke.ps1）
