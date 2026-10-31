@@ -369,6 +369,7 @@ fn apply(st: &mut Style, sp: &StyleSpec, sides: Option<&Sides>, default_font: &(
         let font = st.font_mut();
         if fresh || font.name().is_empty() {
             font.set_name(default_font.0.clone());
+            font.font_scheme_mut().set_val(umya_spreadsheet::structs::FontSchemeValues::None);
         }
         if fresh || font.size() == 0.0 {
             font.set_size(default_font.1);
@@ -411,6 +412,7 @@ fn apply(st: &mut Style, sp: &StyleSpec, sides: Option<&Sides>, default_font: &(
         let font = st.font_mut();
         font.set_name(default_font.0.clone());
         font.set_size(default_font.1);
+        font.font_scheme_mut().set_val(umya_spreadsheet::structs::FontSchemeValues::None);
     }
     if let Some(fill) = &sp.fill {
         if fill.is_empty() {
