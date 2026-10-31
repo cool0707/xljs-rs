@@ -386,6 +386,7 @@ ad.get("yamada");                                 // 1 件（ログオン名・�
 ad.search("山田*");                               // 名前・ログオン名・表示名・メールで検索（既定はユーザー）
 ad.search({ filter: { department: "営業部", title: ["課長", "部長"] } });   // Get-ADUser -Filter
 ad.search({ filter: "(employeeID=00*)" });        // LDAP のフィルタも可
+ad.search({ filter: { department: ad.me().department }, disabled: false }); // 自分の部署の有効なユーザー
 ad.search({ disabled: true });                    // Search-ADAccount -AccountDisabled
 ad.search({ lockedOut: true });                   // Search-ADAccount -LockedOut
 ad.search({ expired: true }) / ad.search({ expiringDays: 30 }) / ad.search({ passwordExpired: true })

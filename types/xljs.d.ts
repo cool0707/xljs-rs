@@ -1106,7 +1106,7 @@ declare global {
 
   /**
    * filter のオブジェクト形式。属性ごとの条件をすべて満たすものを探す（AND）。
-   * 文字列は一致（"*" は任意の文字列）、配列はどれかに一致、true は値がある、false / null は値がない
+   * 文字列は一致（"*" は任意の文字列）、配列はどれかに一致、true は値がある、false / null は値がない（undefined はエラー）
    */
   type ADFilter = { [attribute: string]: string | number | boolean | null | (string | number)[] };
 

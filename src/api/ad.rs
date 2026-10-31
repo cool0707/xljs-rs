@@ -113,7 +113,13 @@ fn search_options(o: &Value) -> Result<(SearchOptions, String)> {
             s.filters.push(to_str(&f));
         } else if f.is_object() {
             for k in keys(&f) {
-                let c = cond(&js::get(&f, &k));
+                let v = js::get(&f, &k);
+                // { department: me.department } of someone without one would
+                // otherwise list everyone without a department.
+                if v.is_undefined() {
+                    return Err(err!("ad.undefinedFilter", k));
+                }
+                let c = cond(&v);
                 s.conds.push((k, c));
             }
         }

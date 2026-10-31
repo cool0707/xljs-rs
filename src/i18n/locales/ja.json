@@ -97,6 +97,7 @@
     "cli.programs": "プログラム",
     "cli.packed": "作成しました:\n{0}\n\nフォルダを開きますか？",
     "ad.expectedOptions": "{0} のオプションはオブジェクトで指定してください",
+    "ad.undefinedFilter": "filter.{0} の値が undefined です（値がないものを探すなら null）",
     "ad.unsupported": "Active Directory は Windows でのみ使えます",
     "ad.notJoined": "このコンピューターはドメインに参加していません",
     "ad.notDomainUser": "サインイン中のユーザーはドメインのアカウントではありません",

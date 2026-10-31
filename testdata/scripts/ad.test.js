@@ -66,7 +66,11 @@ equal(all.cn, "山田 太郎");
 equal(all.sAMAccountName, "yamada");
 equal(ad.get("yamada", { properties: ["msDS-User-Account-Control-Computed"] })["msDS-User-Account-Control-Computed"], 0);
 
+// The enabled people of my department.
+deepEqual(sams(ad.search({ filter: { department: ad.me().department }, disabled: false })), ["yamada", "suzuki"]);
+
 // Mistakes are errors.
+throws(() => ad.search({ filter: { department: ad.get("PC001").department } }), /filter\.department の値が undefined/);
 throws(() => ad.search({ disable: true }), /オプション "disable"/);
 throws(() => ad.search({ type: "printer" }), /printer/);
 throws(() => ad.search({ filter: "(cn=a" }), /検索条件/);

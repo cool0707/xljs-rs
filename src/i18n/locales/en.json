@@ -97,6 +97,7 @@
     "cli.programs": "Programs",
     "cli.packed": "Created\n{0}\n\nShow it in its folder?",
     "ad.expectedOptions": "{0}: options must be an object",
+    "ad.undefinedFilter": "the value of filter.{0} is undefined (use null for \"no value\")",
     "ad.unsupported": "Active Directory is only available on Windows",
     "ad.notJoined": "this computer is not joined to a domain",
     "ad.notDomainUser": "the signed-in user is not a domain account",
