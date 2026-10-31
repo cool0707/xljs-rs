@@ -331,3 +331,34 @@ fn known_folder(name: &str) -> Option<String> {
     };
     Some(Path::new(&home).join(sub).to_string_lossy().into_owned())
 }
+
+#[cfg(all(test, windows))]
+mod tests {
+    use windows::Win32::Storage::FileSystem::*;
+
+    use super::*;
+
+    #[test]
+    fn walk_skips_hidden_attribute() {
+        let dir = crate::testutil::tempdir();
+        for name in ["a.xlsx", "desktop.ini", "sys.dat", "hid/b.xlsx"] {
+            let p = dir.join(name);
+            std::fs::create_dir_all(p.parent().unwrap()).unwrap();
+            std::fs::write(&p, "x").unwrap();
+        }
+        let set_attr = |name: &str, attr: FILE_FLAGS_AND_ATTRIBUTES| unsafe {
+            let p = windows::core::HSTRING::from(dir.join(name).as_os_str());
+            SetFileAttributesW(&p, attr).unwrap();
+        };
+        set_attr("desktop.ini", FILE_ATTRIBUTE_HIDDEN | FILE_ATTRIBUTE_SYSTEM);
+        set_attr("sys.dat", FILE_ATTRIBUTE_SYSTEM);
+        set_attr("hid", FILE_ATTRIBUTE_HIDDEN | FILE_ATTRIBUTE_DIRECTORY);
+
+        let root = dir.to_string_lossy();
+        let res = walk(&root, &[], &[], false, true, false).unwrap();
+        assert!(res.len() == 1 && res[0].rel == "a.xlsx", "walk without hidden = {:?}", res.iter().map(|e| &e.rel).collect::<Vec<_>>());
+        let res = walk(&root, &[], &[], false, true, true).unwrap();
+        assert_eq!(res.len(), 4, "walk with hidden = {:?}", res.iter().map(|e| &e.rel).collect::<Vec<_>>());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+}

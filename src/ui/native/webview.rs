@@ -109,7 +109,7 @@ pub(super) fn icon_from_bytes(data: &[u8], size: u32) -> Option<HICON> {
     unsafe { CreateIconFromResourceEx(img, true, 0x00030000, size as i32, size as i32, LR_DEFAULTCOLOR).ok() }
 }
 
-fn icon_for_metric(data: &[u8], metric: SYSTEM_METRICS_INDEX) -> HICON {
+pub(super) fn icon_for_metric(data: &[u8], metric: SYSTEM_METRICS_INDEX) -> HICON {
     let size = unsafe { GetSystemMetrics(metric) };
     icon_from_bytes(data, if size > 0 { size as u32 } else { 32 }).unwrap_or_default()
 }

@@ -287,3 +287,27 @@ fn run_forwards_to_caller() {
     }
     assert!(log.text().contains("progress closed at 2/3"), "{}", log.text());
 }
+
+/// The bundled Font Awesome stylesheet finds every font it refers to.
+#[test]
+fn font_awesome() {
+    const CSS: &str = "fontawesome/css/all.min.css";
+    let src = String::from_utf8_lossy(builtin_file(CSS).expect(CSS)).into_owned();
+    let re = regex::Regex::new(r"url\(([^)]+)\)").unwrap();
+    let urls: Vec<&str> = re.captures_iter(&src).map(|c| c.get(1).unwrap().as_str()).collect();
+    assert!(!urls.is_empty(), "no url() in {CSS}");
+    for u in urls {
+        let mut parts: Vec<&str> = vec!["fontawesome", "css"];
+        for seg in u.trim_matches(['"', '\'']).split('/') {
+            match seg {
+                ".." => {
+                    parts.pop();
+                }
+                "." | "" => {}
+                s => parts.push(s),
+            }
+        }
+        let name = parts.join("/");
+        assert!(builtin_file(&name).is_some(), "{CSS} refers to {u} ({name}): not found");
+    }
+}
