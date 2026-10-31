@@ -1156,7 +1156,7 @@
 
   /** An HTML window opened by app.open (or the main window of @mode app). */
   class AppWindow {
-    constructor(html, winTitle, width, height) {
+    constructor(html, winTitle, width, height, fixedSize) {
       define(this, "_queue", []);        // messages until the page is ready
       define(this, "_ready", false);
       define(this, "_closed", false);
@@ -1177,7 +1177,7 @@
           return true;
         },
       }));
-      define(this, "_n", native.appOpen(html, winTitle, width, height, (text, files) => this._receive(text, files)));
+      define(this, "_n", native.appOpen(html, winTitle, width, height, (text, files) => this._receive(text, files), !!fixedSize));
       /** Resolves when the window has been closed. */
       define(this, "closed", this._n.closed.then(() => {
         this._closed = true;
@@ -1346,7 +1346,7 @@
       if (typeof options === "string") options = { html: options };
       return new AppWindow(options.html === undefined ? "" : String(options.html),
         options.title === undefined ? title() : String(options.title),
-        Number(options.width) || 0, Number(options.height) || 0);
+        Number(options.width) || 0, Number(options.height) || 0, options.resizable === false);
     },
     /**
      * Lets windows call fn by name (xljs.invoke), like an export of the
@@ -1381,7 +1381,7 @@
       let m;
       try { m = JSON.parse(text); } catch (e) { return; }
       if (m && typeof m.type === "string") onMessage(m, files.filter((f) => f !== ""));
-    });
+    }, !!opts.fixedSize);
     return { n, send: (m) => n.post(JSON.stringify(m)) };
   }
 
@@ -1976,6 +1976,7 @@
     return {
       width: Number(options.width) || 600,
       height: Number(options.height) || Math.min(Math.max(h, 220), 760),
+      fixedSize: options.resizable === false,
     };
   }
 
@@ -2333,7 +2334,7 @@
 
   function tableWindow(data, cols, sel, t, options) {
     let picked = [];
-    const page = openPage("table.html", { title: t, width: Number(options.width) || 960, height: Number(options.height) || 600 },
+    const page = openPage("table.html", { title: t, width: Number(options.width) || 960, height: Number(options.height) || 600, fixedSize: options.resizable === false },
       (m) => { handle(m).catch((e) => page.send({ type: "error", message: errorText(e) })); });
 
     async function handle(m) {

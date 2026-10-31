@@ -16,6 +16,7 @@ app.main.close(); // closing again is harmless
 
 const sub = app.open({ html: "ui/sub page.html", title: "詳細", width: 300, height: 200 });
 await sub.closed;
+await app.open({ html: "ui/sub page.html", title: "固定", width: 320, height: 240, resizable: false }).closed;
 equal(app.open().closed instanceof Promise, true, "empty page");
 throws(() => app.open({ html: "../outside.html" }), /相対パス/);
 throws(() => app.open("ui/missing.html"), /見つかりません/);
