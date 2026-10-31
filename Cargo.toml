@@ -16,7 +16,7 @@ name = "xljs"
 path = "src/main.rs"
 
 [dependencies]
-rquickjs = { version = "0.14", features = ["classes", "properties"] }
+rquickjs = { version = "0.14", features = ["classes", "properties", "macro"] }
 oxc = { version = "0.156", features = ["transformer", "codegen", "semantic", "ast_visit"] }
 oxc_sourcemap = "9"
 umya-spreadsheet = "3.1"
