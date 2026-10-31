@@ -14,7 +14,7 @@ mod shell;
 mod thread;
 
 use std::sync::Arc;
-use std::sync::atomic::{AtomicI32, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
 
 use serde::{Deserialize, Serialize};
 
@@ -157,6 +157,9 @@ pub trait Ui: Send + Sync {
     fn choose(&self, _title: &str, _message: &str, _choices: &[Choice]) -> Option<i64> {
         None
     }
+    /// Shows a notification (on Windows, the one at the bottom right of
+    /// the screen) and returns without waiting for it.
+    fn notify(&self, _title: &str, _message: &str) {}
 }
 
 /// A form for UIs without HTML windows. Values are strings for every field
@@ -256,6 +259,19 @@ pub struct Choice {
 }
 
 static INTERRUPTS: AtomicI32 = AtomicI32::new(0);
+static AUTO_NOTIFY: AtomicBool = AtomicBool::new(true);
+
+/// Sets whether the native UI shows a notification when a dialog or a
+/// window opens while the user is working in another application (the
+/// dialog then cannot come to the front by itself).
+pub fn set_auto_notify(on: bool) {
+    AUTO_NOTIFY.store(on, Ordering::SeqCst);
+}
+
+/// See set_auto_notify.
+pub fn auto_notify() -> bool {
+    AUTO_NOTIFY.load(Ordering::SeqCst)
+}
 static ACTIVE_PROGRESS: AtomicI32 = AtomicI32::new(0);
 
 /// Records a Ctrl+C press. It returns the total number of presses so far.

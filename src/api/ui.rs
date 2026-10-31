@@ -70,6 +70,14 @@ pub(super) fn install(n: &N) {
         h.env.ui.show_error(&a.str(0), &a.str(1));
         a.undefined()
     });
+    n.set("uiNotify", |h, a| {
+        h.env.ui.notify(&a.str(0), &a.str(1));
+        a.undefined()
+    });
+    n.set("uiAutoNotify", |_, a| {
+        crate::ui::set_auto_notify(a.bool(0));
+        a.undefined()
+    });
     n.set("shellShowInFolder", |h, a| {
         h.env.ui.show_in_folder(&a.strings(0)).map_err(|e| a.throw(&e))?;
         a.undefined()

@@ -73,6 +73,7 @@ impl UiThread for WinThread {
         loop {
             if *done.0.lock().unwrap() {
                 drain();
+                super::finish_notifications();
                 unsafe {
                     let _ = DestroyWindow(HWND(self.hwnd as *mut _));
                 }
