@@ -160,4 +160,6 @@ await rejects(() => ui.form({ fields: [], buttons: [{ label: "x" }] }), /onClick
 await rejects(() => ui.form({ fields: [{ name: "a", type: "colour" }] }), /colour/);
 await rejects(() => ui.form({ fields: [{ name: "a" }, { name: "a" }] }), /重複/);
 await rejects(() => ui.form({ fields: [{ name: "a", type: "select" }] }), /options/);
+await rejects(() => ui.form({ fields: [], accent: "red; } body { display: none" }), /accent/);
+await rejects(() => ui.form({ fields: [], accent: { light: 12 } }), /accent/);
 console.log("form ok");

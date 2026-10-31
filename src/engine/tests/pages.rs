@@ -235,7 +235,8 @@ fn form_and_table_windows() {
             // The form icon goes to the custom title bar (not to the page).
             check!(
                 p,
-                p.w.o.custom_title_bar && p.w.o.title_icon == "fa-solid fa-table" && p.w.o.title == "窓" && init["submitIcon"] == "fa-regular fa-circle-play" && init.get("icon").is_none(),
+                p.w.o.custom_title_bar && p.w.o.title_icon == "fa-solid fa-table" && p.w.o.title == "窓" && init["submitIcon"] == "fa-regular fa-circle-play" && init.get("icon").is_none()
+                    && init["accent"] == json!({"light": "#c42b1c", "dark": "#c42b1c"}),
                 "title bar = {} {:?} {:?}, submitIcon = {}",
                 p.w.o.custom_title_bar,
                 p.w.o.title_icon,
@@ -338,7 +339,7 @@ fn form_and_table_windows() {
     ];
     let u = PageUi::new(r#"{"showDirectoryPicker": ["data"], "showSaveFilePicker": ["out.csv", "out.xlsx"]}"#, Some(log.sink()), pages);
     let src = r#"
-const v = await ui.form({ title: "窓", titleBar: "custom", icon: "table", submitIcon: "fa-regular fa-circle-play", fields: [
+const v = await ui.form({ title: "窓", titleBar: "custom", icon: "table", accent: " #c42b1c ", submitIcon: "fa-regular fa-circle-play", fields: [
   { name: "src", label: "フォルダ", type: "folder", required: true, icon: "folder-open" },
   { name: "n", type: "number", icon: "bad<icon> fa-brands  fa-windows" },
   { name: "mode", type: "select", options: ["顧客別", "商品別"] },
