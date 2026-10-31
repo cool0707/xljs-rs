@@ -67,9 +67,8 @@ impl WebWindow {
 
 impl Window for WebWindow {
     fn post(&self, msg: String) {
-        if let Some(st) = state(self.hwnd())
-            && let Some(core) = &*st.core.borrow()
-        {
+        let core = state(self.hwnd()).and_then(|st| st.core.borrow().clone());
+        if let Some(core) = core {
             unsafe {
                 let _ = core.PostWebMessageAsString(&hstr(&format!("{HOST_PREFIX}{msg}")));
             }
@@ -532,7 +531,10 @@ fn destroyed(hwnd: HWND, st: &Rc<WinState>) {
     if st.closed.replace(true) {
         return;
     }
-    if let Some(c) = st.controller.borrow_mut().take() {
+    // Close re-enters wnd_proc (WebView2 destroys its child windows): no
+    // borrow may be held across it.
+    let controller = st.controller.borrow_mut().take();
+    if let Some(c) = controller {
         unsafe {
             let _ = c.Close();
         }
