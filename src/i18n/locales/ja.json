@@ -46,6 +46,8 @@
     "ui.copied": "コピーしました",
     "ui.cancel": "キャンセル",
     "ui.nativeUnavailable": "ネイティブ UI は Windows でのみ使えます",
+    "ui.notificationTitle": "Notification には title が必要です",
+    "ui.waiting": "入力を待っています",
     "ui.pressEnter": "(Enter で続行) ",
     "ui.fileToOpen": "開くファイルのパス",
     "ui.multipleHint": "、複数は ; 区切り",

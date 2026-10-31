@@ -5,6 +5,7 @@
 
 mod dialogs;
 mod loader;
+mod notify;
 mod thread;
 mod webview;
 
@@ -22,6 +23,7 @@ use windows::core::{HSTRING, PCWSTR, w};
 use super::*;
 use crate::{Error, Result, err};
 
+pub(crate) use notify::finish as finish_notifications;
 pub(crate) use thread::new_ui_thread;
 pub(crate) use webview::webview2_version;
 
@@ -74,7 +76,13 @@ pub(crate) fn hstr(s: &str) -> HSTRING {
 }
 
 fn message_box(title: &str, message: &str, flags: MESSAGEBOX_STYLE) -> MESSAGEBOX_RESULT {
-    unsafe { MessageBoxW(owner(), &hstr(message), &hstr(title), flags | MB_SETFOREGROUND | MB_TOPMOST) }
+    notify::watching(title, message, || unsafe { MessageBoxW(owner(), &hstr(message), &hstr(title), flags | MB_SETFOREGROUND | MB_TOPMOST) })
+}
+
+/// The title of the notification shown for a picker that opens in the
+/// background.
+fn waiting_title(title: &str) -> String {
+    if title.is_empty() { "xljs".into() } else { title.to_string() }
 }
 
 const ERROR_CANCELLED_HR: u32 = 0x800704C7;
@@ -147,7 +155,7 @@ fn file_dialog(save: bool, folder: bool, o: &PickerOptions) -> Result<Vec<String
         if save && !o.suggested_name.is_empty() {
             let _ = dlg.SetFileName(&hstr(&o.suggested_name));
         }
-        if let Err(e) = dlg.Show(owner()) {
+        if let Err(e) = notify::watching(&waiting_title(&o.title), &crate::t!("ui.waiting"), || dlg.Show(owner())) {
             if e.code().0 as u32 == ERROR_CANCELLED_HR {
                 return Ok(Vec::new());
             }
@@ -186,7 +194,7 @@ impl Ui for Native {
     }
 
     fn prompt(&self, title: &str, message: &str, def: &str) -> Option<String> {
-        dialogs::prompt(title, message, def)
+        notify::watching(title, message, || dialogs::prompt(title, message, def))
     }
 
     fn open_files(&self, o: &PickerOptions) -> Vec<String> {
@@ -227,7 +235,7 @@ impl Ui for Native {
     /// Shows the error in a dialog whose text can be selected and copied,
     /// falling back to a message box.
     fn show_error(&self, title: &str, message: &str) {
-        if !dialogs::error_dialog(title, message) {
+        if !notify::watching(title, message, || dialogs::error_dialog(title, message)) {
             message_box(title, message, MB_OK | MB_ICONERROR);
         }
     }
@@ -258,6 +266,10 @@ impl Ui for Native {
 
     fn choose(&self, title: &str, message: &str, choices: &[Choice]) -> Option<i64> {
         Some(dialogs::choose(title, message, choices))
+    }
+
+    fn notify(&self, title: &str, message: &str) {
+        notify::show(title, message);
     }
 }
 

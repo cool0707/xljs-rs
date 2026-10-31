@@ -1015,9 +1015,48 @@
     /** Whether the most recent progress was cancelled by the user. */
     get cancelled() { return lastCancelled; },
     error: (message) => native.uiError(title(), msg(message)),
+    /**
+     * Shows a notification (on Windows, at the bottom right of the screen)
+     * and returns at once. options: the title, or { title }.
+     */
+    notify(message, options) {
+      const t = typeof options === "string" ? options : options && options.title !== undefined ? String(options.title) : title();
+      native.uiNotify(t, msg(message));
+    },
+    /**
+     * Whether a notification is shown when a dialog or window opens while
+     * the user is working in another application (default true).
+     */
+    get autoNotify() { return autoNotify; },
+    set autoNotify(v) { autoNotify = !!v; native.uiAutoNotify(autoNotify); },
     Progress,
   };
+  let autoNotify = true;
+  native.uiAutoNotify(true);
   defineGlobal("ui", uiObj);
+
+  /** The browser's Notification, shown like ui.notify. */
+  class Notification {
+    constructor(notificationTitle, options = {}) {
+      if (notificationTitle === undefined) throw new TypeError(T("ui.notificationTitle"));
+      define(this, "title", String(notificationTitle));
+      define(this, "body", options && options.body !== undefined ? String(options.body) : "");
+      define(this, "tag", options && options.tag !== undefined ? String(options.tag) : "");
+      define(this, "data", options && options.data !== undefined ? options.data : null);
+      this.onclick = null;
+      this.onclose = null;
+      this.onerror = null;
+      this.onshow = null;
+      native.uiNotify(this.title, this.body);
+    }
+    static get permission() { return "granted"; }
+    static requestPermission(callback) {
+      if (typeof callback === "function") callback("granted");
+      return Promise.resolve("granted");
+    }
+    close() {}
+  }
+  defineGlobal("Notification", Notification);
 
   // ---------------------------------------------------------------- app (HTML windows)
   //

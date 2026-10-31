@@ -88,6 +88,31 @@ declare global {
   /** キャンセル時は null */
   function prompt(message?: unknown, defaultValue?: string): string | null;
 
+  interface NotificationOptions {
+    body?: string;
+    tag?: string;
+    data?: unknown;
+  }
+  /**
+   * ブラウザの Notification。ui.notify と同じく画面右下に通知を出してすぐに戻る。
+   * 許可は常に "granted"。クリックなどのイベントは発生しない
+   */
+  class Notification {
+    constructor(title: string, options?: NotificationOptions);
+    static readonly permission: "granted";
+    static requestPermission(callback?: (permission: "granted") => void): Promise<"granted">;
+    readonly title: string;
+    readonly body: string;
+    readonly tag: string;
+    readonly data: unknown;
+    onclick: ((this: Notification, ev: unknown) => unknown) | null;
+    onclose: ((this: Notification, ev: unknown) => unknown) | null;
+    onerror: ((this: Notification, ev: unknown) => unknown) | null;
+    onshow: ((this: Notification, ev: unknown) => unknown) | null;
+    /** 何もしない（通知は Windows が閉じる） */
+    close(): void;
+  }
+
   type WellKnownDirectory = "desktop" | "documents" | "downloads" | "music" | "pictures" | "videos";
 
   interface FilePickerAcceptType {
@@ -188,6 +213,16 @@ declare global {
     readonly cancelled: boolean;
     /** エラーダイアログを表示する */
     error(message: unknown): void;
+    /**
+     * 画面右下に通知を出し、すぐに戻る（コンソールでは 1 行表示）。
+     * options はタイトルの文字列か { title }（既定は xljs.title）。クリックすると xljs のウィンドウを前面に出す
+     */
+    notify(message: unknown, options?: string | { title?: string }): void;
+    /**
+     * 他のアプリで作業中に alert・confirm・prompt・ui.error・ピッカー・フォームなどが開いたとき、
+     * 自動で通知を出すか（既定 true）
+     */
+    autoNotify: boolean;
   }
   const ui: Ui;
 

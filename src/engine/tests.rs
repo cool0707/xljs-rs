@@ -403,6 +403,7 @@ macro_rules! forward_ui {
             fn supports_windows(&self) -> bool { self.windows }
             fn form(&self, o: &crate::ui::FormOptions) -> Option<serde_json::Map<String, serde_json::Value>> { self.m.form(o) }
             fn table(&self, o: &crate::ui::TableOptions) -> Option<Vec<i64>> { self.m.table(o) }
+            fn notify(&self, a: &str, b: &str) { self.m.notify(a, b) }
         }
     };
 }

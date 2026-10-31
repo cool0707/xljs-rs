@@ -150,6 +150,10 @@ impl Ui for Console {
         self.w(&format!("{message}\n"));
     }
 
+    fn notify(&self, title: &str, message: &str) {
+        self.w(&format!("{}{message}\n", Self::header(title)));
+    }
+
     fn progress(&self, o: &ProgressOptions) -> Arc<dyn Progress> {
         progress_opened();
         let p = ConsoleProgress {

@@ -46,6 +46,8 @@
     "ui.copied": "Copied",
     "ui.cancel": "Cancel",
     "ui.nativeUnavailable": "the native UI is only available on Windows",
+    "ui.notificationTitle": "Failed to construct 'Notification': 1 argument required, but only 0 present.",
+    "ui.waiting": "Waiting for your input",
     "ui.pressEnter": "(press Enter) ",
     "ui.fileToOpen": "File to open",
     "ui.multipleHint": ", separate multiple with ;",

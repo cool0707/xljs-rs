@@ -148,6 +148,10 @@ impl Ui for Mock {
         self.logf(&format!("error: {message}"));
     }
 
+    fn notify(&self, title: &str, message: &str) {
+        self.logf(&format!("notify({}, {})", quote(title), quote(message)));
+    }
+
     fn progress(&self, o: &ProgressOptions) -> Arc<dyn Progress> {
         #[derive(serde::Deserialize, Default)]
         struct Cfg {

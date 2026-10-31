@@ -201,6 +201,11 @@ impl Ui for Threaded {
         let (a, b, c) = (title.to_string(), message.to_string(), choices.to_vec());
         self.on(move |u| u.choose(&a, &b, &c))
     }
+    fn notify(&self, title: &str, message: &str) {
+        // Does not wait, like progress updates.
+        let (u, a, b) = (self.u.clone(), title.to_string(), message.to_string());
+        self.t.post(Box::new(move || u.notify(&a, &b)));
+    }
 }
 
 /// Forwards progress calls. Updates do not wait; the cancellation state is

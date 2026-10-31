@@ -311,3 +311,14 @@ fn font_awesome() {
         assert!(builtin_file(&name).is_some(), "{CSS} refers to {u} ({name}): not found");
     }
 }
+
+#[test]
+fn mock_and_console_notify() {
+    let _l = lock_lang("ja");
+    let log = SharedBuf::default();
+    Mock::from_json("", Some(log.sink())).unwrap().notify("集計", "完了しました");
+    assert_eq!(log.text(), "[mock] notify(\"集計\", \"完了しました\")\n");
+    let out = SharedBuf::default();
+    console("", &out).notify("集計", "完了しました");
+    assert_eq!(out.text(), "[集計] 完了しました\n");
+}

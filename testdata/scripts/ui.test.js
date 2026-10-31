@@ -31,6 +31,21 @@ equal(prompt("again?"), null);
 alert("hello");
 alert({ any: "value" });
 
+// Notifications return at once.
+ui.notify("finished");
+ui.notify("finished", { title: "集計" });
+ui.notify("finished", "集計");
+const n = new Notification("集計", { body: "3 件" });
+equal(n.title, "集計");
+equal(n.body, "3 件");
+n.close();
+equal(Notification.permission, "granted");
+equal(await Notification.requestPermission(), "granted");
+equal(ui.autoNotify, true);
+ui.autoNotify = false;
+equal(ui.autoNotify, false);
+ui.autoNotify = true;
+
 // Progress: manual API.
 const p = ui.progress({ title: "manual", total: 3 });
 p.update(1, "one");

@@ -177,6 +177,7 @@ pub(super) fn open(o: WindowOptions) -> Result<Arc<dyn Window>> {
                 SendMessageW(hwnd, WM_SETICON, Some(WPARAM(which as usize)), Some(LPARAM(icon.0 as isize)));
             }
         }
+        let title = o.title.clone();
         let st = Rc::new(WinState {
             o,
             controller: RefCell::new(None),
@@ -197,6 +198,8 @@ pub(super) fn open(o: WindowOptions) -> Result<Arc<dyn Window>> {
             return Err(e);
         }
         WINDOWS.with(|w| w.borrow_mut().push(hwnd));
+        // Not cancelled: the window stays open.
+        super::notify::watch(&if title.is_empty() { "xljs".to_string() } else { title }, &crate::t!("ui.waiting"));
         Ok(Arc::new(WebWindow { hwnd: hwnd.0 as isize }))
     }
 }

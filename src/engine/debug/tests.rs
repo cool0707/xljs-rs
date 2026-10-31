@@ -81,6 +81,9 @@ impl Ui for FakeDebugUi {
     fn table(&self, o: &TableOptions) -> Option<Vec<i64>> {
         self.inner.table(o)
     }
+    fn notify(&self, a: &str, b: &str) {
+        self.inner.notify(a, b)
+    }
 }
 
 struct Page {

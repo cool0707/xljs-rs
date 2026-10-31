@@ -48,12 +48,14 @@ description: xljs（Excel・CSV・JSON を JavaScript で処理する Windows �
 | `confirm(msg)` | `true` / `false`（同期） |
 | `prompt(msg, 既定値)` | 文字列。キャンセルで `null`（同期） |
 | `ui.error(msg)` | エラーのダイアログ |
+| `ui.notify(msg, { title })` | 画面右下の通知。待たずに戻る |
 | `await showOpenFilePicker({ multiple, types, startIn, title })` | ファイルハンドルの配列。キャンセルで `[]` |
 | `await showSaveFilePicker({ suggestedName, types, startIn })` | ファイルハンドル。キャンセルで `null` |
 | `await showDirectoryPicker({ startIn, title })` | フォルダハンドル。キャンセルで `null` |
 
 - `types`: `[{ description: "Excel", accept: [".xlsx", ".xlsm"] }]`
 - `startIn`: `"desktop"` `"documents"` `"downloads"`、パス、ハンドル（そのファイルのフォルダから開く）
+- 他のアプリで作業中にダイアログやフォームが開くと、自動で通知が出る（`ui.autoNotify = false` で止める）。長い処理の終わりは `alert` で十分。
 - `showSaveFilePicker` は保存先を決めるだけで、ファイルはまだ作られない。`types` を省略すると `suggestedName` の拡張子が付く（利用者が `集計` と入力しても `集計.xlsx`）。
 
 ## ファイル・フォルダ
