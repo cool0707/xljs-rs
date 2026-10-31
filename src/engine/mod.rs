@@ -73,6 +73,10 @@ pub struct Options {
     /// turns the check off. Not used by debug_script (the debugger can
     /// pause the script).
     pub watchdog: Option<std::time::Duration>,
+    /// Asks the user whether to stop the script when this key is pressed
+    /// while it runs JavaScript (see watchdog.rs). None turns it off; it
+    /// only works on Windows. Not used by debug_script either.
+    pub stop_key: Option<watchdog::StopKey>,
 }
 
 
@@ -204,11 +208,10 @@ pub fn run(mut o: Options) -> Result<i32> {
             }
         })));
     }
-    if let Some(limit) = o.watchdog {
-        rt.set_interrupt_handler(Some(watchdog::handler(Rc::downgrade(&host), limit)));
-    }
+    let stop = watchdog::install(&rt, Rc::downgrade(&host), o.watchdog, o.stop_key.clone());
     let res = ctx.with(|ctx| run_in(&ctx, &host, &code));
     rt.set_interrupt_handler(None);
+    drop(stop);
     host.env.ui_cleanup(&host);
     ctx.with(|_| host.clear());
     rt.set_host_promise_rejection_tracker(None);

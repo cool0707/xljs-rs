@@ -6,7 +6,7 @@ use crate::testutil::{SharedBuf, lock_lang, repo_path, tempdir};
 fn launch_with(answers: serde_json::Value) -> (i32, String) {
     let log = SharedBuf::default();
     let u = Arc::new(ui::Mock::from_json(&answers.to_string(), Some(log.sink())).unwrap());
-    let code = launch::launch(&ConsoleState { has: true, own: false }, u, false, "");
+    let code = launch::launch(&ConsoleState { has: true, own: false }, u, false, &Stop::default());
     (code, log.text())
 }
 
@@ -91,6 +91,24 @@ fn watchdog_flag() {
     for v in ["-1", "abc", "inf"] {
         assert!(parse_watchdog(v, true).is_err(), "{v:?}");
     }
-    let (f, rest) = parse_flags(&["--watchdog=off".into(), "a.js".into()]).unwrap();
-    assert_eq!((f.watchdog.as_deref(), rest), (Some("off"), vec!["a.js".to_string()]));
+    let (f, rest) = parse_flags(&["--watchdog=off".into(), "--stop-key".into(), "f12".into(), "a.js".into()]).unwrap();
+    assert_eq!((f.watchdog.as_deref(), f.stop_key.as_deref(), rest), (Some("off"), Some("f12"), vec!["a.js".to_string()]));
+}
+
+#[test]
+fn stop_key_flag() {
+    let key = |s: &str| Some(watchdog::StopKey::parse(s).unwrap());
+    for (v, native, want) in [
+        ("", true, key("esc")),
+        ("", false, None),
+        ("on", false, key("esc")),
+        ("off", true, None),
+        ("F12", false, key("f12")),
+        ("ctrl+shift+q", true, key("ctrl+shift+q")),
+    ] {
+        assert_eq!(parse_stop_key(v, native).unwrap(), want, "{v:?} native={native}");
+    }
+    for v in ["hoge", "ctrl", "q+w"] {
+        assert!(parse_stop_key(v, true).is_err(), "{v:?}");
+    }
 }

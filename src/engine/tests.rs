@@ -605,3 +605,72 @@ fn watchdog_ignores_waiting_scripts() {
     assert!(r.code == 0 && r.err.is_none() && r.stdout.contains("done"), "exit {} {} {:?}", r.code, r.err_text(), r.stderr);
     assert!(!r.stderr.contains("無限ループ"), "asked: {:?}", r.stderr);
 }
+
+/// Runs src with the stop key read from down (on a script thread of
+/// ui::run).
+fn run_with_key(src: &str, confirm: &str, down: Arc<std::sync::atomic::AtomicBool>) -> Res {
+    let (o, e) = (SharedBuf::default(), SharedBuf::default());
+    let m = Mock::from_json(&format!(r#"{{"confirm": {confirm}}}"#), Some(e.sink())).unwrap();
+    let mut key = watchdog::StopKey::parse("esc").unwrap();
+    key.probe = Some(Arc::new(move |vk| vk == 0x1B && down.load(std::sync::atomic::Ordering::SeqCst)));
+    let mut opts = Options {
+        script_path: write_script("key.js", src),
+        stdout: Some(out(&o)),
+        stderr: Some(out(&e)),
+        stop_key: Some(key),
+        ..Default::default()
+    };
+    let r = crate::ui::run(Arc::new(m), move |su| {
+        opts.ui = Some(su);
+        run(opts)
+    });
+    let (code, err) = match r {
+        Ok(c) => (c, None),
+        Err(e) => (1, Some(e)),
+    };
+    Res { code, err, stdout: o.text(), stderr: e.text() }
+}
+
+/// Holds the key down from after until after + 100 ms (another thread).
+fn press_later(down: &Arc<std::sync::atomic::AtomicBool>, after: Duration) {
+    let d = down.clone();
+    std::thread::spawn(move || {
+        std::thread::sleep(after);
+        d.store(true, std::sync::atomic::Ordering::SeqCst);
+        std::thread::sleep(Duration::from_millis(100));
+        d.store(false, std::sync::atomic::Ordering::SeqCst);
+    });
+}
+
+#[test]
+fn stop_key_stops_running_script() {
+    let _l = lock_lang("ja");
+    for (name, src) in [
+        ("sync", "while (true) {}"),
+        ("timer", "setTimeout(() => { for (;;) {} }, 1); await sleep(100000)"),
+    ] {
+        let down = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        press_later(&down, Duration::from_millis(500));
+        let r = run_with_key(src, "[true]", down);
+        assert_eq!(r.code, watchdog::STOPPED_CODE, "{name}: err {} stderr {:?}", r.err_text(), r.stderr);
+        assert!(r.stderr.contains("Esc キーが押されました") && r.stderr.contains("スクリプトを中止しました"), "{name}: {:?}", r.stderr);
+    }
+    // "keep running": the script goes on and ends normally.
+    let down = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    press_later(&down, Duration::from_millis(400));
+    let r = run_with_key("const end = Date.now() + 1200; while (Date.now() < end) {} console.log(\"done\")", "[false]", down);
+    assert!(r.code == 0 && r.stdout.contains("done") && r.stderr.contains("Esc キー"), "exit {} {} {:?}", r.code, r.err_text(), r.stderr);
+}
+
+#[test]
+fn stop_key_ignored_while_waiting() {
+    let _l = lock_lang("ja");
+    // Pressed while the script waits (a timer, as if Esc closed a
+    // dialog): nothing is asked after it resumes.
+    let down = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    press_later(&down, Duration::from_millis(200));
+    let src = "await sleep(600); const end = Date.now() + 500; while (Date.now() < end) {} console.log(\"done\")";
+    let r = run_with_key(src, "[]", down);
+    assert!(r.code == 0 && r.stdout.contains("done"), "exit {} {} {:?}", r.code, r.err_text(), r.stderr);
+    assert!(!r.stderr.contains("confirm("), "asked: {:?}", r.stderr);
+}

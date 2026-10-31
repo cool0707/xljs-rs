@@ -68,6 +68,12 @@ pub(crate) fn available() -> bool {
     true
 }
 
+/// Whether the virtual key vk is down now (any thread, any focus).
+pub(crate) fn key_down(vk: u16) -> bool {
+    let state = unsafe { windows::Win32::UI::Input::KeyboardAndMouse::GetAsyncKeyState(vk as i32) };
+    (state as u16) & 0x8000 != 0
+}
+
 pub(crate) fn hstr(s: &str) -> HSTRING {
     // A NUL ends the text.
     HSTRING::from(s.split('\0').next().unwrap_or(""))
