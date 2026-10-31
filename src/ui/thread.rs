@@ -209,6 +209,11 @@ impl Ui for Threaded {
         let (u, a, b) = (self.u.clone(), title.to_string(), message.to_string());
         self.t.post(Box::new(move || u.notify(&a, &b)));
     }
+    fn print_pdf(&self, job: PdfJob, done: PdfDone) {
+        // done comes later, from the UI thread.
+        let u = self.u.clone();
+        self.t.post(Box::new(move || u.print_pdf(job, done)));
+    }
 }
 
 /// Forwards progress calls. Updates do not wait; the cancellation state is

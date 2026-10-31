@@ -84,6 +84,9 @@ impl Ui for FakeDebugUi {
     fn notify(&self, a: &str, b: &str) {
         self.inner.notify(a, b)
     }
+    fn print_pdf(&self, job: crate::ui::PdfJob, done: crate::ui::PdfDone) {
+        self.inner.print_pdf(job, done)
+    }
 }
 
 struct Page {

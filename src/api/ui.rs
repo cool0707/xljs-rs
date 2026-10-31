@@ -102,6 +102,34 @@ pub(super) fn install(n: &N) {
             None => a.null(),
         }
     });
+    // pdfPrint(html, chartsJSON, textsJSON, path) -> Promise<string>: "" when
+    // the PDF is written, else the message of the error.
+    n.set("pdfPrint", |h, a| {
+        let ctx = a.ctx.clone();
+        let (promise, resolve, _) = ctx.promise()?;
+        let id = h.keep_fn(&ctx, resolve);
+        let poster = h.poster();
+        // The job keeps the event loop alive until it is done.
+        poster.add_pending();
+        let job = crate::ui::PdfJob { html: a.str(0), charts: a.str(1), texts: a.str(2), path: a.str(3) };
+        h.env.ui.print_pdf(
+            job,
+            Box::new(move |r| {
+                let msg = match r {
+                    Ok(()) => String::new(),
+                    Err(e) => i18n::error(&e),
+                };
+                poster.post(Box::new(move |ctx, host| {
+                    if let Some(f) = host.kept_fn(ctx, id) {
+                        f.call::<_, Value>((msg,))?;
+                    }
+                    host.drop_fn(id);
+                    Ok(())
+                }));
+            }),
+        );
+        Ok(promise.into_value())
+    });
     n.set("configDir", |_, a| a.ret(config_dir()));
     // displayText(s) translates library messages for display.
     n.set("displayText", |_, a| a.ret(i18n::text(&a.str(0))));

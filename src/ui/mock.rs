@@ -152,6 +152,15 @@ impl Ui for Mock {
         self.logf(&format!("notify({}, {})", quote(title), quote(message)));
     }
 
+    fn print_pdf(&self, job: PdfJob, done: PdfDone) {
+        // Writes nothing: the log tells what would be printed.
+        let pages = job.html.matches("class=\"xljs-page\"").count();
+        let charts: Vec<Value> = serde_json::from_str(&job.charts).unwrap_or_default();
+        let drawn = charts.iter().filter(|c| c.get("spec").is_some()).count();
+        self.logf(&format!("pdf({}, {} pages, {}/{} charts)", quote(&job.path), pages, drawn, charts.len()));
+        done(Ok(()))
+    }
+
     fn progress(&self, o: &ProgressOptions) -> Arc<dyn Progress> {
         #[derive(serde::Deserialize, Default)]
         struct Cfg {

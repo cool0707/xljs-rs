@@ -1,6 +1,6 @@
 ---
 name: xljs-reference
-description: xljs（Excel・CSV・JSON を JavaScript で処理する Windows 用の実行環境）の詳しい API リファレンスとレシピ。xljs のスクリプトを書く・直すときに、全オプション・書式・入力フォーム（ui.form）・表（ui.table）・グラフ（ui.chart）・日付（dayjs）・アプリモードを確かめるために使う。
+description: xljs（Excel・CSV・JSON を JavaScript で処理する Windows 用の実行環境）の詳しい API リファレンスとレシピ。xljs のスクリプトを書く・直すときに、全オプション・書式・PDF 出力・入力フォーム（ui.form）・表（ui.table）・グラフ（ui.chart）・日付（dayjs）・アプリモードを確かめるために使う。
 ---
 
 # xljs API リファレンス（AI チャット向け）
@@ -123,6 +123,7 @@ description: xljs（Excel・CSV・JSON を JavaScript で処理する Windows �
 | `book.addSheet(name)` / `book.removeSheet(name)` | 追加・削除 |
 | `book.save()` / `book.save(p)` | 上書き保存 / 別名保存 |
 | `book.close()` | 閉じる（メモリ解放） |
+| `await book.toPdf(p, options?)` / `await sheet.toPdf(p, options?)` | Excel で印刷したときのように PDF に書き出す（下記「PDF」） |
 | `workbooks.readVBA(p)` | マクロブック（.xlsm / .xlsb など）の VBA コード。`{ name, modules: [{ name, type, code, sheet }], text }`、マクロがなければ `null`。`type` は `"standard"` `"class"` `"document"`（ThisWorkbook とシート）`"form"`。`text` は全モジュールの Markdown |
 | `workbooks.columnName(3)` → `"C"`、`workbooks.cellName(2, 3)` → `"C2"` | 番地の変換 |
 
@@ -186,6 +187,23 @@ sheet.setRowHeight(1, 30);        // 行の高さ（ポイント）
 | 罫線 | `border: "thin"`（全セルの上下左右）、または `{ outline, inside, horizontal, vertical, top, bottom, left, right }`。線種 `"thin"` `"medium"` `"thick"` `"double"` `"dashed"` `"dotted"`、色付きは `{ style: "thin", color: "#999999" }` |
 
 色は `"#RRGGBB"` か `red` などの色名。書式は既存の書式に重ねて適用される（`{ replace: true }` で置き換え）。
+
+### PDF
+
+Excel がなくても、印刷したときと同じページで PDF にできる（Windows の WebView2 を使う。コンソール・mock では使えない）。
+
+```js
+const book = workbooks.open("請求書.xlsx");
+await book.toPdf("請求書.pdf");                                  // 非表示でないすべてのシート
+await book.toPdf("一覧.pdf", { sheets: ["一覧"], fitToWidth: 1 }); // 横 1 ページに収める
+await book.sheets["明細"].toPdf("明細.pdf", { paper: "A4", landscape: true, margin: 10 });
+await xljs.htmlToPdf("<h1>報告書</h1><p>本文</p>", "報告書.pdf", { paper: "A4" }); // HTML から
+```
+
+- ブックのページ設定に従う: 用紙・向き・余白・拡大縮小と「次のページ数に合わせて印刷」・印刷範囲・印刷タイトル・改ページ・ページの順序・ヘッダー/フッター（`&P` `&N` `&D` `&A` `&F` など）・左右中央。
+- `options` で上書きできる: `paper`（`"A3"` `"A4"` `"B5"` `"Letter"` など）`landscape` `scale`（%）`fitToWidth` `fitToHeight` `fitToPage` `margin`（mm）`gridLines` `centerHorizontally` `charts: false` `sheets`。
+- 値・表示形式・フォント・塗り・罫線・結合・折り返し・回転・画像・グラフ（`sheet.charts` で描けるもの）を描く。条件付き書式・図形・テキストボックス・Excel 2016 以降のグラフは描かない。自動の改ページの位置は Excel と少し違うことがある。
+- `toHtml(options?)` は同じページを HTML の文字列で返す（グラフは空の枠）。
 
 ## CSV
 

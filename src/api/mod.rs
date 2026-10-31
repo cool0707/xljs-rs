@@ -16,6 +16,7 @@ mod ui;
 mod vba;
 mod xlsx;
 mod xlsx_chart;
+mod xlsx_print;
 mod xlsx_style;
 
 use std::cell::{Cell, RefCell};
@@ -299,6 +300,13 @@ static PRELUDE_RAW: &str = include_str!("prelude.js");
 static PRELUDE: LazyLock<String> = LazyLock::new(|| PRELUDE_RAW.replacen(dayjs::PLACEHOLDER, &dayjs::bundle(), 1));
 
 /// The prelude: a function expression that receives the natives object.
+/// The print layout (book.toHtml) of every visible sheet of xlsx bytes.
+#[cfg(test)]
+pub(crate) fn print_html_of(data: &[u8]) -> crate::Result<String> {
+    let b = xlsx::open_bytes(data, String::new())?;
+    Ok(xlsx_print::workbook_html(&b, &Default::default())?.html)
+}
+
 pub fn prelude_source() -> &'static str {
     &PRELUDE
 }
@@ -327,6 +335,7 @@ pub(crate) fn install_natives<'js>(ctx: &Ctx<'js>, host: &Rc<Host>) -> rquickjs:
     csv::install(&n);
     xlsx::install(&n);
     xlsx_style::install(&n);
+    xlsx_print::install(&n);
     vba::install(&n);
     ui::install(&n);
     app::install(&n);

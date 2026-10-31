@@ -27,6 +27,11 @@ declare global {
     env(name: string): string | null;
     /** console.log と同じ形式で値を文字列化する */
     inspect(value: unknown, options?: { depth?: number }): string;
+    /**
+     * HTML 文書を PDF に書き出す（WebView2 が必要。Windows のネイティブ UI のみ）。HTML 内のスクリプトは動かない。
+     * 画像は data: URL で埋め込む。改ページは CSS の break-before / break-after。書き出したファイルの絶対パスを返す
+     */
+    htmlToPdf(html: string, dest: PathLike, options?: HtmlPdfOptions): Promise<string>;
   }
   const xljs: Xljs;
 
@@ -1263,6 +1268,51 @@ declare global {
     unfreeze(): this;
     /** フィルターを付ける（既定: 使用範囲） */
     autoFilter(address?: string): this;
+    /**
+     * Excel で印刷したときのように PDF に書き出す（WebView2 が必要。Windows のネイティブ UI のみ）。
+     * 用紙・向き・余白・拡大縮小・印刷範囲・印刷タイトル・改ページ・ヘッダー/フッターはシートのページ設定に従い、options で上書きできる。
+     * グラフ（sheet.charts で描けるもの）も描く。書き出したファイルの絶対パスを返す
+     */
+    toPdf(dest: PathLike, options?: PrintOptions): Promise<string>;
+    /** 印刷したときのページを HTML 文書にする（グラフは空の枠。ブラウザで開くとページの区切りが見える） */
+    toHtml(options?: PrintOptions): string;
+  }
+
+  /** toPdf / toHtml のオプション。省略した項目はシートのページ設定に従う */
+  interface PrintOptions {
+    /** 書き出すシート（名前・番号・Worksheet。workbook.toPdf のみ。既定: 非表示でないすべてのシート） */
+    sheets?: (string | number | Worksheet)[];
+    /** 用紙: "A3" "A4" "A5" "B4" "B5"（JIS）"Letter" "Legal" など */
+    paper?: string;
+    /** 横向き */
+    landscape?: boolean;
+    /** 拡大縮小（%、10〜400） */
+    scale?: number;
+    /** 横 n ページに収める（true は 1）。fitToHeight を省くと縦は自動 */
+    fitToWidth?: number | boolean;
+    /** 縦 n ページに収める（true は 1）。fitToWidth を省くと横は自動 */
+    fitToHeight?: number | boolean;
+    /** 1 ページに収める */
+    fitToPage?: boolean;
+    /** 余白（mm）。数値なら上下左右とも */
+    margin?: number | { top?: number; right?: number; bottom?: number; left?: number };
+    /** 枠線（セルの境界の薄い線）を印刷する */
+    gridLines?: boolean;
+    /** ページの左右中央に配置する */
+    centerHorizontally?: boolean;
+    /** false でグラフを描かない */
+    charts?: boolean;
+    /** PDF の文書のタイトル（既定: ファイル名） */
+    title?: string;
+  }
+
+  /** xljs.htmlToPdf のオプション。HTML に @page があればそちらが優先 */
+  interface HtmlPdfOptions {
+    /** 用紙（CSS の size の名前: "A4" "A3" "A5" "B4" "B5" "letter" "legal"。既定 "A4"） */
+    paper?: string;
+    landscape?: boolean;
+    /** 余白（mm、既定 15） */
+    margin?: number | { top?: number; right?: number; bottom?: number; left?: number };
   }
 
   interface Workbook {
@@ -1277,6 +1327,10 @@ declare global {
     save(dest?: PathLike): this;
     toArrayBuffer(): ArrayBuffer;
     toBlob(): Blob;
+    /** シート（既定: 非表示でないすべて。options.sheets で指定）を Excel で印刷したときのように 1 つの PDF に書き出す。詳しくは Worksheet.toPdf */
+    toPdf(dest: PathLike, options?: PrintOptions): Promise<string>;
+    /** 印刷したときのページを HTML 文書にする（グラフは空の枠） */
+    toHtml(options?: PrintOptions): string;
     close(): void;
     /** ブックの既定フォント */
     readonly defaultFont: { name: string; size: number };

@@ -36,6 +36,9 @@ pub struct Book {
     pub font_changed: bool,
     /// The parts of the file with its charts (None for a new workbook).
     pub charts: Option<super::xlsx_chart::ChartParts>,
+    /// What umya-spreadsheet does not keep of the sheets' page setup, by
+    /// sheet name (empty for a new workbook).
+    pub print: std::collections::HashMap<String, super::xlsx_print::RawPrint>,
 }
 
 pub(crate) fn zerr(e: impl std::fmt::Display) -> Error {
@@ -50,7 +53,7 @@ impl Book {
     fn new(wb: Workbook, path: String, styles_xml: Option<&[u8]>) -> Book {
         let default_font = styles_xml.and_then(first_font).unwrap_or(("Calibri".into(), 11.0));
         let date1904 = false; // see read_date1904
-        Book { wb, path, date1904, fresh: false, formulas: false, closed: false, default_font, font_changed: false, charts: None }
+        Book { wb, path, date1904, fresh: false, formulas: false, closed: false, default_font, font_changed: false, charts: None, print: Default::default() }
     }
 
     pub fn sheet(&self, name: &str) -> Result<&Worksheet> {
@@ -163,6 +166,7 @@ pub fn open_bytes(data: &[u8], path: String) -> Result<Book> {
     let mut b = Book::new(wb, path, styles.as_deref());
     b.date1904 = read_date1904(data);
     b.charts = Some(super::xlsx_chart::ChartParts::collect(data));
+    b.print = super::xlsx_print::collect_raw(data);
     Ok(b)
 }
 
@@ -634,6 +638,9 @@ pub(super) fn install(n: &N) {
                 return Err(a.throw(&err!("xlsx.sheetExists", to)));
             }
             b.wb.set_sheet_name(idx, to.clone()).map_err(|e| a.throw(&Error::msg(e.to_string())))?;
+            if let Some(p) = b.print.remove(&from) {
+                b.print.insert(to.clone(), p);
+            }
             if b.fresh && from == "Sheet1" {
                 b.fresh = false;
             }

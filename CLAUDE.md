@@ -7,6 +7,7 @@ Excel 未インストール環境で動くこと、日本語環境での使い�
 
 HTML UI・フォーム・表表示・デバッガの設計は `docs/handoff-ui.md`（Go 版で書かれたメモ。仕組みは同じ）を参照。
 グラフ・ガントチャート（`ui.chart`・フォームの `chart` 項目・`xljs.chart`、AG Charts / Frappe Gantt、Excel のグラフ `sheet.charts` からの変換）は `docs/charts-design.md`。
+PDF 出力（`book.toPdf`・`sheet.toPdf`・`xljs.htmlToPdf`。シートの印刷レイアウトを HTML にして WebView2 の `Page.printToPDF`）は `docs/pdf-design.md`。
 
 ## 構成
 
@@ -14,8 +15,8 @@ HTML UI・フォーム・表表示・デバッガの設計は `docs/handoff-ui.m
 |---|---|
 | `src/main.rs`, `src/cli` | CLI。グローバルフラグ（`--ui` `--ui-answers` `--lang` `--debug`、Go の flag と同じ書式）→ サブコマンド（pack/check/init/vba/version/help。スクリプトの代わりにブックを渡すと VBA の取り出し。引数なしは `launch.rs` の開始画面＝`Ui::choose`。アイコンは `src/cli/icons/*.ico`）→ メタデータを読んで `ui::run` でスクリプト実行。`console.rs` はコンソールへの接続（GUI 版） |
 | `src/engine` | `bundle.rs`: oxc で TS 変換 → module runner 変換（import を `await __vite_ssr_import__`、export を getter に）→ モジュールごとの async 関数を 1 つの式にまとめ、インラインのソースマップを付ける（CommonJS・JSON・.txt・node_modules も解決）。`mod.rs`: QuickJS（rquickjs）で実行、`Error.prepareStackTrace` でスタックを元のファイルに対応付け。`loop_.rs` はタイマーと他スレッドからの post。`debug.rs` は `--debug` のデバッグセッション（後述） |
-| `src/api` | Rust 側ネイティブ関数（`N::set("name", |host, args| ...)` で natives オブジェクトに登録）と `prelude.js`（Go 版から移したもの。公開 API をすべて JS で組み立てる）。Rust→JS は `native.xxx` 経由のみ。`Host` がスクリプト実行中の状態（Env、ループ、ブック、保持中の JS 値）。`xlsx.rs`/`xlsx_style.rs` は umya-spreadsheet、`xlsx_calc.rs` は `cell.calc()` の簡易計算、`xlsx_chart.rs` はブック内の Excel のグラフの読み取り、`numfmt.rs` は表示書式。`gopath.rs` は Go の filepath と同じ意味のパス関数。`remote.rs` はデバッガ用のワイヤ形式 |
-| `src/ui` | `Ui` トレイトと実装: `native`（Windows のみ。Win32 ダイアログ、IFileDialog、IProgressDialog、WebView2 ウィンドウ。`loader.rs` は WebView2Loader.dll なしでランタイムを読み込む）、`Console`、`Mock`（応答 JSON＋ログ。テスト用）。`thread.rs` の `ui::run` がスクリプトを専用スレッドで動かし、UI 呼び出しを呼び出し元（main スレッド）へ転送する。`web/` は組み込みページ（Go 版から移したもの）（`build.rs` が埋め込みリストを生成）。`web/chart.js` はグラフの共通アダプタ、`web/vendor/` は同梱ライブラリ（AG Charts Community・Frappe Gantt。版は `VERSIONS.md`） |
+| `src/api` | Rust 側ネイティブ関数（`N::set("name", |host, args| ...)` で natives オブジェクトに登録）と `prelude.js`（Go 版から移したもの。公開 API をすべて JS で組み立てる）。Rust→JS は `native.xxx` 経由のみ。`Host` がスクリプト実行中の状態（Env、ループ、ブック、保持中の JS 値）。`xlsx.rs`/`xlsx_style.rs` は umya-spreadsheet、`xlsx_calc.rs` は `cell.calc()` の簡易計算、`xlsx_chart.rs` はブック内の Excel のグラフの読み取り、`xlsx_print.rs` は印刷レイアウト（ページ設定・改ページ → HTML）、`numfmt.rs` は表示書式。`gopath.rs` は Go の filepath と同じ意味のパス関数。`remote.rs` はデバッガ用のワイヤ形式 |
+| `src/ui` | `Ui` トレイトと実装: `native`（Windows のみ。Win32 ダイアログ、IFileDialog、IProgressDialog、WebView2 ウィンドウ。`loader.rs` は WebView2Loader.dll なしでランタイムを読み込む）、`Console`、`Mock`（応答 JSON＋ログ。テスト用）。`thread.rs` の `ui::run` がスクリプトを専用スレッドで動かし、UI 呼び出しを呼び出し元（main スレッド）へ転送する。`web/` は組み込みページ（Go 版から移したもの）（`build.rs` が埋め込みリストを生成）。`web/chart.js` はグラフの共通アダプタ、`web/print.html` は PDF 出力のページ（`Ui::print_pdf` が見えないウィンドウで開く）、`web/vendor/` は同梱ライブラリ（AG Charts Community・Frappe Gantt。版は `VERSIONS.md`） |
 | `src/meta` | エントリ先頭の `// ==xljs==` メタデータのパースと、アセットだけを見せる `AssetFs`（`DirAssets`/`MemAssets`） |
 | `src/vba` | マクロブックの VBA ソースの読み取り（cfb で `vbaProject.bin` / `_VBA_PROJECT_CUR` を開き、MS-OVBA の解凍）。テスト用の固定データは `testdata/vba/`（Go 版のテスト用ビルダーで生成したもの） |
 | `src/i18n` | メッセージ。`locales/<lang>.json` を `include_str!`。`en.json` が基準・フォールバック |
