@@ -264,3 +264,89 @@ fn load_icon() {
         }
     }
 }
+
+/// Scripts in the real debugger window (WebView2): natives through the
+/// synchronous bridge, timers and promises of Rust (workbooks, sleep) and
+/// the end of the run.
+#[test]
+fn debugger_window() {
+    use crate::engine::{Options, run};
+    use crate::testutil::SharedBuf;
+
+    if webview2_version().is_empty() {
+        eprintln!("WebView2 runtime not installed; skipped");
+        return;
+    }
+    let _l = crate::testutil::lock_lang("ja");
+    let data = crate::testutil::tempdir();
+    unsafe { std::env::set_var(crate::ui::WEBVIEW2_DATA_ENV, &data) };
+    let cases: &[(&str, &str, &str, &str, i32)] = &[
+        (
+            "ok",
+            r#"const b = workbooks.create();
+const s = b.addSheet("集計");
+s.cell("A1").value = new Date(2026, 3, 1);
+await sleep(10);
+console.log(s.cell("A1").value.getMonth(), xljs.ui, typeof document);
+exit(4);"#,
+            "3 native undefined\n",
+            "",
+            4,
+        ),
+        ("error", "function f() { throw new RangeError(\"だめ\"); }\nsetTimeout(f, 1);", "", "RangeError: だめ", 1),
+    ];
+    let u = setup();
+    for &(name, src, stdout, want_err, want_code) in cases {
+        let dir = crate::testutil::tempdir();
+        let script = dir.join("main.js");
+        std::fs::write(&script, src).unwrap();
+        // What passed between Rust and the page, for when it fails or hangs.
+        let start = Instant::now();
+        let trace = Arc::new(Mutex::new(Vec::<String>::new()));
+        let done = Arc::new(AtomicBool::new(false));
+        {
+            let (trace, done) = (trace.clone(), done.clone());
+            std::thread::spawn(move || {
+                let t = Instant::now();
+                while t.elapsed() < Duration::from_secs(90) {
+                    if done.load(Ordering::SeqCst) {
+                        return;
+                    }
+                    std::thread::sleep(Duration::from_millis(100));
+                }
+                eprintln!("debugger_window/{name} hangs; trace:\n{}", trace.lock().unwrap().join("\n"));
+                std::process::exit(1);
+            });
+        }
+        let note = {
+            let trace = trace.clone();
+            Arc::new(move |s: String| trace.lock().unwrap().push(format!("{:5}ms {s}", start.elapsed().as_millis())))
+        };
+        let (out, err_out) = (SharedBuf::default(), SharedBuf::default());
+        let o = Options {
+            script_path: script.to_string_lossy().into_owned(),
+            stdout: Some(Arc::new(Mutex::new(out.clone()))),
+            stderr: Some(Arc::new(Mutex::new(err_out.clone()))),
+            version: "test".into(),
+            debug: true,
+            debug_script: true,
+            debug_auto_run: true,
+            debug_trace: Some(note),
+            ..Default::default()
+        };
+        let r = crate::ui::run(u.clone(), move |su| run(Options { ui: Some(su), ..o }));
+        done.store(true, Ordering::SeqCst);
+        let (code, msg) = match r {
+            Ok(c) => (c, String::new()),
+            Err(e) => (1, e.to_string()),
+        };
+        let ctx = || format!("{name}: stderr:\n{}\ntrace:\n{}", err_out.text(), trace.lock().unwrap().join("\n"));
+        assert_eq!(code, want_code, "exit code (error {msg:?}); {}", ctx());
+        assert!(want_err.is_empty() == msg.is_empty() && msg.contains(want_err), "error {msg:?}, want {want_err:?}; {}", ctx());
+        if !want_err.is_empty() {
+            assert!(msg.contains("main.js:1:"), "error {msg:?} does not point to main.js; {}", ctx());
+        }
+        assert_eq!(out.text(), stdout, "stdout; {}", ctx());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+}

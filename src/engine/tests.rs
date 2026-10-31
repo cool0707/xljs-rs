@@ -538,3 +538,5 @@ fn ai_docs() {
     let got = std::fs::read_to_string(repo_path("docs/ai/copilot/skills/xljs-reference/SKILL.md")).unwrap().replace("\r\n", "\n");
     assert_eq!(got, want, "copilot/skills/xljs-reference/SKILL.md differs from reference.md");
 }
+
+mod pages;
