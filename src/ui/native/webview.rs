@@ -137,13 +137,14 @@ pub(super) fn open(o: WindowOptions) -> Result<Arc<dyn Window>> {
     register_class();
     let width = if o.width > 0 { o.width } else { DEFAULT_WIDTH };
     let height = if o.height > 0 { o.height } else { DEFAULT_HEIGHT };
+    let style = if o.fixed_size { WS_OVERLAPPEDWINDOW & !(WS_THICKFRAME | WS_MAXIMIZEBOX) } else { WS_OVERLAPPEDWINDOW };
     unsafe {
         let mut dpi = GetDpiForSystem();
         if dpi == 0 {
             dpi = 96;
         }
         let mut r = RECT { left: 0, top: 0, right: (width * dpi as i64 / 96) as i32, bottom: (height * dpi as i64 / 96) as i32 };
-        let _ = AdjustWindowRectEx(&mut r, WS_OVERLAPPEDWINDOW, false, Default::default());
+        let _ = AdjustWindowRectEx(&mut r, style, false, Default::default());
         let (ww, wh) = (r.right - r.left, r.bottom - r.top);
         let mut work = RECT::default();
         let _ = SystemParametersInfoW(SPI_GETWORKAREA, 0, Some(&mut work as *mut _ as *mut _), Default::default());
@@ -153,7 +154,7 @@ pub(super) fn open(o: WindowOptions) -> Result<Arc<dyn Window>> {
             Default::default(),
             w!("xljsWindow"),
             &hstr(&o.title),
-            WS_OVERLAPPEDWINDOW,
+            style,
             x,
             y,
             ww,

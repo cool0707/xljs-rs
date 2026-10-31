@@ -365,6 +365,8 @@ declare global {
     /** ウィンドウの大きさ（既定は項目数から決める） */
     width?: number;
     height?: number;
+    /** false にするとウィンドウの大きさを固定する（枠のドラッグ・最大化ができない）。既定は true */
+    resizable?: boolean;
   }
 
   // ------------------------------------------------------------------ ui.table
@@ -406,6 +408,8 @@ declare global {
     columns?: (string | TableColumn)[];
     width?: number;
     height?: number;
+    /** false にするとウィンドウの大きさを固定する。既定は true */
+    resizable?: boolean;
     /**
      * 行（セル）をダブルクリックしたときに呼ばれる。ファイルを開く・メッセージを出すなどに使う。
      * 指定すると selectable: "single" でもダブルクリックで OK にはならない。
@@ -451,6 +455,8 @@ declare global {
     /** クライアント領域の幅・高さ（論理ピクセル） */
     width?: number;
     height?: number;
+    /** false にするとウィンドウの大きさを固定する（枠のドラッグ・最大化ができない）。既定は true */
+    resizable?: boolean;
   }
   /**
    * 画面との間で受け渡せる値: JSON の値に加えて Date、ファイル/フォルダのハンドル、

@@ -84,6 +84,9 @@ pub struct WindowOptions {
     /// The client size in logical pixels (0 = default).
     pub width: i64,
     pub height: i64,
+    /// Keeps the window at its size: no resizing border and no maximize
+    /// button.
+    pub fixed_size: bool,
     /// The first page; "" shows an empty page. Pages under ASSET_ORIGIN are
     /// served from assets.
     pub url: String,

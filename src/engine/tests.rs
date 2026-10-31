@@ -96,6 +96,7 @@ fn check_script_output(name: &str, r: &Res) -> Vec<String> {
                 r#"window.open("アプリのテスト", "https://app.xljs/ui/index.html", 640x480)"#,
                 r#"window.open("詳細", "https://app.xljs/ui/sub%20page.html", 300x200)"#,
                 r#"window.closed("詳細")"#,
+                r#"window.open("固定", "https://app.xljs/ui/sub%20page.html", 320x240, fixed)"#,
             ],
             "mock log",
         ),

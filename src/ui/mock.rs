@@ -219,7 +219,14 @@ impl Ui for Mock {
     /// Logs the window and closes it right away, as if the user had closed
     /// it without doing anything (unless an "app" scenario is queued).
     fn open_window(&self, o: WindowOptions) -> Result<Arc<dyn Window>> {
-        self.logf(&format!("window.open({}, {}, {}x{})", quote(&o.title), quote(&o.url), o.width, o.height));
+        self.logf(&format!(
+            "window.open({}, {}, {}x{}{})",
+            quote(&o.title),
+            quote(&o.url),
+            o.width,
+            o.height,
+            if o.fixed_size { ", fixed" } else { "" }
+        ));
         if !o.icon.is_empty() {
             self.logf(&format!("window.icon({} bytes)", o.icon.len()));
         }
