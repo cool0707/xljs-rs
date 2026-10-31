@@ -29,6 +29,11 @@ jobs:
         run: |
           if ! cargo test --lib -- --test-threads=1 > test.log 2>&1; then
             cat test.log
+            # A crash (abort, fast fail) loses the captured output: run again
+            # without capturing to see what the tests printed.
+            if grep -q 'exited abnormally' test.log; then
+              RUST_BACKTRACE=1 cargo test --lib -- --test-threads=1 --nocapture 2>&1 | tail -200 || true
+            fi
             # Surface the failures as an annotation (readable via the API).
             msg=$(grep -E -- 'panicked|FAILED|^error|\.js:[0-9]+' test.log | head -40 | sed 's/%/%25/g' | awk '{printf "%s%%0A", $0}')
             echo "::error title=cargo test failed::${msg}"

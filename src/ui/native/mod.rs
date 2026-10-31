@@ -9,7 +9,7 @@ mod thread;
 mod webview;
 
 use std::cell::RefCell;
-use std::sync::{Arc, Mutex, OnceLock};
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use serde_json::{Map, Value};
@@ -39,22 +39,26 @@ pub(crate) fn owner() -> Option<HWND> {
     WINDOWS.with(|w| w.borrow().last().copied())
 }
 
-static COM: OnceLock<std::result::Result<(), String>> = OnceLock::new();
+thread_local! {
+    /// The result of initialising COM on this thread (COM is per thread:
+    /// tests, for one, run each on a thread of its own).
+    static COM: std::result::Result<(), String> = unsafe {
+        let hr = CoInitializeEx(None, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
+        // S_FALSE (already initialised) and RPC_E_CHANGED_MODE are fine.
+        if hr.is_err() && hr.0 as u32 != 0x80010106 {
+            Err(format!("CoInitializeEx failed: HRESULT 0x{:08X}", hr.0 as u32))
+        } else {
+            Ok(())
+        }
+    };
+}
 
 impl Native {
     /// Initialises COM on the calling thread and returns the native UI.
     pub fn new() -> Result<Arc<dyn Ui>> {
-        let r = COM.get_or_init(|| unsafe {
-            let hr = CoInitializeEx(None, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
-            // S_FALSE (already initialised) and RPC_E_CHANGED_MODE are fine.
-            if hr.is_err() && hr.0 as u32 != 0x80010106 {
-                return Err(format!("CoInitializeEx failed: HRESULT 0x{:08X}", hr.0 as u32));
-            }
-            Ok(())
-        });
-        match r {
+        match COM.with(|r| r.clone()) {
             Ok(()) => Ok(Arc::new(Native)),
-            Err(e) => Err(Error::msg(e.clone())),
+            Err(e) => Err(Error::msg(e)),
         }
     }
 }
