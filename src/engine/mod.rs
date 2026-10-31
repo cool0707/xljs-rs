@@ -39,6 +39,7 @@ pub const BUNDLE_NAME: &str = "xljs:bundle";
 
 /// Configures a script run.
 #[derive(Clone)]
+#[derive(Default)]
 pub struct Options {
     /// The entry file. When code is set it is only used for naming and to
     /// derive the script directory.
@@ -68,25 +69,6 @@ pub struct Options {
     pub debug_trace: Option<Arc<dyn Fn(String) + Send + Sync>>,
 }
 
-impl Default for Options {
-    fn default() -> Self {
-        Options {
-            script_path: String::new(),
-            code: None,
-            args: Vec::new(),
-            ui: None,
-            stdout: None,
-            stderr: None,
-            version: String::new(),
-            meta: None,
-            assets: None,
-            debug: false,
-            debug_script: false,
-            debug_auto_run: false,
-            debug_trace: None,
-        }
-    }
-}
 
 /// A JavaScript error that terminated the script.
 #[derive(Debug, Clone)]

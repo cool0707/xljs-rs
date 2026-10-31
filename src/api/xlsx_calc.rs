@@ -134,9 +134,7 @@ fn tokenize(s: &str) -> Result<Vec<Tok>> {
                 i += 1;
             }
             let t: String = c[st..i].iter().collect();
-            if i < c.len() && c[i] == '(' {
-                out.push(Tok::Name(t.to_uppercase()));
-            } else if t.eq_ignore_ascii_case("TRUE") || t.eq_ignore_ascii_case("FALSE") {
+            if (i < c.len() && c[i] == '(') || t.eq_ignore_ascii_case("TRUE") || t.eq_ignore_ascii_case("FALSE") {
                 out.push(Tok::Name(t.to_uppercase()));
             } else {
                 out.push(Tok::Ref(t));

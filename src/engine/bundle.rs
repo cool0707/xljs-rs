@@ -519,11 +519,10 @@ fn conditional(v: &serde_json::Value) -> Option<String> {
         serde_json::Value::Array(a) => a.iter().find_map(conditional),
         serde_json::Value::Object(m) => {
             for (k, t) in m {
-                if matches!(k.as_str(), "import" | "default" | "module") {
-                    if let Some(s) = conditional(t) {
+                if matches!(k.as_str(), "import" | "default" | "module")
+                    && let Some(s) = conditional(t) {
                         return Some(s);
                     }
-                }
             }
             None
         }

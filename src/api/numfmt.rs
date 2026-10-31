@@ -179,7 +179,7 @@ pub fn format_number(f: f64, code: &str) -> String {
         let digits: Vec<char> = ip.chars().collect();
         let mut g = String::new();
         for (i, c) in digits.iter().enumerate() {
-            if i > 0 && (digits.len() - i) % 3 == 0 {
+            if i > 0 && (digits.len() - i).is_multiple_of(3) {
                 g.push(',');
             }
             g.push(*c);
@@ -193,9 +193,6 @@ pub fn format_number(f: f64, code: &str) -> String {
     out.push_str(&prefix);
     out.push_str(&ip);
     if !dp.is_empty() || dec_pat.contains('0') {
-        out.push('.');
-        out.push_str(&dp);
-    } else if !dec_pat.is_empty() && !dp.is_empty() {
         out.push('.');
         out.push_str(&dp);
     }
@@ -276,7 +273,7 @@ pub fn format_date(t: (i32, u32, u32, u32, u32, u32, u32), code: &str) -> String
             'a' if chars[i..].iter().collect::<String>().to_lowercase().starts_with("aaa") => {
                 let n = run(i, 'a');
                 if let Some(w) = weekday {
-                    out.push_str(if n >= 4 { &["日曜日", "月曜日", "火曜日", "水曜日", "木曜日", "金曜日", "土曜日"][w] } else { DAYS_JA[w] });
+                    out.push_str(if n >= 4 { ["日曜日", "月曜日", "火曜日", "水曜日", "木曜日", "金曜日", "土曜日"][w] } else { DAYS_JA[w] });
                 }
                 i += n;
             }
@@ -311,7 +308,6 @@ pub fn format_date(t: (i32, u32, u32, u32, u32, u32, u32), code: &str) -> String
                 }
                 last_was_hour = false;
             }
-            'g' | 'e' if lc == 'e' && false => {}
             '[' => {
                 // [h]:mm elapsed hours (not expected for dates); keep the text.
                 i += 1;

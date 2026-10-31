@@ -394,11 +394,10 @@ fn apply(st: &mut Style, sp: &StyleSpec, sides: Option<&Sides>, default_font: &(
             let v = if u.is_empty() { UnderlineValues::None } else { UnderlineValues::from_str(u).unwrap_or(UnderlineValues::Single) };
             font.font_underline_mut().set_val(v);
         }
-        if let Some(v) = &f.vert_align {
-            if let Ok(x) = umya_spreadsheet::structs::VerticalAlignmentRunValues::from_str(v) {
+        if let Some(v) = &f.vert_align
+            && let Ok(x) = umya_spreadsheet::structs::VerticalAlignmentRunValues::from_str(v) {
                 font.vertical_text_alignment_mut().set_val(x);
             }
-        }
         if let Some(c) = &f.color {
             if c.is_empty() {
                 *font.color_mut() = umya_spreadsheet::Color::default();

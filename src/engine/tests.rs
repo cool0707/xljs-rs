@@ -508,29 +508,6 @@ fn form_icon() {
     assert_eq!(*u.icons.lock().unwrap(), vec![ico.len(), ico.len()]);
 }
 
-#[test]
-#[ignore]
-fn debug_run() {
-    let _l = lock_lang("ja");
-    let p = std::env::var("XLJS_RUN").unwrap();
-    let r = run_script(&p, "", &[]);
-    eprintln!("code {} err {}\nstdout:\n{}\nstderr:\n{}", r.code, r.err_text(), r.stdout, r.stderr);
-}
-
-#[test]
-#[ignore]
-fn debug_map() {
-    let p = std::env::var("XLJS_RUN").unwrap();
-    let code = String::from_utf8(bundle(&p).unwrap()).unwrap();
-    let i = code.find("//# sourceMappingURL").unwrap();
-    eprintln!("{}", &code[..i]);
-    let m = Mapper::from_bundle(&code);
-    eprintln!("mapper: {}", m.is_some());
-    if let Some(m) = m {
-        for l in 1..20 { eprintln!("{l}: {:?}", m.lookup(l, 12)); }
-    }
-}
-
 /// The code in the documents for AI chats (docs/ai) is valid syntax, since
 /// the models copy it as is; prompt.md and the Copilot instructions stay
 /// within the size limits of the chats' input boxes.

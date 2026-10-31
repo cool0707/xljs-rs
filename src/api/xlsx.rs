@@ -196,7 +196,7 @@ pub fn column_number(name: &str) -> Result<u32> {
 }
 
 pub fn cell_name(col: u32, row: u32) -> Result<String> {
-    if row < 1 || row > 1_048_576 {
+    if !(1..=1_048_576).contains(&row) {
         return Err(Error::msg(format!("invalid cell reference [{col}, {row}]")));
     }
     Ok(format!("{}{row}", column_name(col as i64)?))
@@ -217,7 +217,7 @@ pub fn parse_ref(r: &str) -> Result<(u32, u32)> {
     }
     let col = column_number(c).map_err(|_| bad())?;
     let row: u32 = rr.parse().map_err(|_| bad())?;
-    if row < 1 || row > 1_048_576 {
+    if !(1..=1_048_576).contains(&row) {
         return Err(bad());
     }
     Ok((col, row))
@@ -239,7 +239,7 @@ pub fn to_serial(y: i32, mo: u32, d: u32, h: u32, mi: u32, s: u32, ms: u32, date
 /// The wall-clock time of an Excel serial number, rounded to the
 /// millisecond: (y, month, d, h, mi, s, ms).
 pub fn from_serial(f: f64, date1904: bool) -> Option<(i32, u32, u32, u32, u32, u32, u32)> {
-    if !f.is_finite() || f < 0.0 || f > 2_958_466.0 {
+    if !f.is_finite() || !(0.0..=2_958_466.0).contains(&f) {
         return None;
     }
     let mut days = f.floor();
@@ -394,11 +394,10 @@ pub(crate) fn cell_text(b: &Book, c: &umya_spreadsheet::Cell) -> String {
         CellRawValue::Numeric(f) => {
             let nf = c.style().number_format();
             let code = format_code(nf);
-            if style_is_date(nf) {
-                if let Some(t) = from_serial(*f, b.date1904) {
+            if style_is_date(nf)
+                && let Some(t) = from_serial(*f, b.date1904) {
                     return super::numfmt::format_date(t, &code);
                 }
-            }
             super::numfmt::format_number(*f, &code)
         }
         other => other.to_string(),
