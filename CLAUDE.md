@@ -1,8 +1,8 @@
 # xljs (Rust 版) — 開発メモ（Claude Code 向け）
 
 JavaScript/TypeScript のスクリプトで Excel・CSV・JSON を処理する Windows 用シングルバイナリ。
-Go 版 xljs（github.com/cool0707/xljs）の Rust 移植で、スクリプトの API・メタデータ・pack 形式・
-メッセージは Go 版と同じに保つ。利用者は「VS Code も入れられないような」一般の業務ユーザー。
+Go 版 xljs（github.com/cool0707/xljs）の Rust 移植。開発はこの Rust 版で進め、Go 版は凍結している
+（Go 版に合わせる必要はない。スクリプトの API・メタデータ・pack 形式の互換は保つ）。利用者は「VS Code も入れられないような」一般の業務ユーザー。
 Excel 未インストール環境で動くこと、日本語環境での使い勝手（CP932、游ゴシック、日本語メッセージ）を重視する。
 
 HTML UI・フォーム・表表示・デバッガの設計は `docs/handoff-ui.md`（Go 版で書かれたメモ。仕組みは同じ）を参照。
@@ -13,8 +13,8 @@ HTML UI・フォーム・表表示・デバッガの設計は `docs/handoff-ui.m
 |---|---|
 | `src/main.rs`, `src/cli` | CLI。グローバルフラグ（`--ui` `--ui-answers` `--lang` `--debug`、Go の flag と同じ書式）→ サブコマンド（pack/check/init/vba/version/help。スクリプトの代わりにブックを渡すと VBA の取り出し。引数なしは `launch.rs` の開始画面＝`Ui::choose`。アイコンは `src/cli/icons/*.ico`）→ メタデータを読んで `ui::run` でスクリプト実行。`console.rs` はコンソールへの接続（GUI 版） |
 | `src/engine` | `bundle.rs`: oxc で TS 変換 → module runner 変換（import を `await __vite_ssr_import__`、export を getter に）→ モジュールごとの async 関数を 1 つの式にまとめ、インラインのソースマップを付ける（CommonJS・JSON・.txt・node_modules も解決）。`mod.rs`: QuickJS（rquickjs）で実行、`Error.prepareStackTrace` でスタックを元のファイルに対応付け。`loop_.rs` はタイマーと他スレッドからの post。`debug.rs` は `--debug` のデバッグセッション（後述） |
-| `src/api` | Rust 側ネイティブ関数（`N::set("name", |host, args| ...)` で natives オブジェクトに登録）と `prelude.js`（Go 版と同一。公開 API をすべて JS で組み立てる）。Rust→JS は `native.xxx` 経由のみ。`Host` がスクリプト実行中の状態（Env、ループ、ブック、保持中の JS 値）。`xlsx.rs`/`xlsx_style.rs` は umya-spreadsheet、`xlsx_calc.rs` は `cell.calc()` の簡易計算、`numfmt.rs` は表示書式。`gopath.rs` は Go の filepath と同じ意味のパス関数。`remote.rs` はデバッガ用のワイヤ形式 |
-| `src/ui` | `Ui` トレイトと実装: `native`（Windows のみ。Win32 ダイアログ、IFileDialog、IProgressDialog、WebView2 ウィンドウ。`loader.rs` は WebView2Loader.dll なしでランタイムを読み込む）、`Console`、`Mock`（応答 JSON＋ログ。テスト用）。`thread.rs` の `ui::run` がスクリプトを専用スレッドで動かし、UI 呼び出しを呼び出し元（main スレッド）へ転送する。`web/` は Go 版と同一の組み込みページ（`build.rs` が埋め込みリストを生成） |
+| `src/api` | Rust 側ネイティブ関数（`N::set("name", |host, args| ...)` で natives オブジェクトに登録）と `prelude.js`（Go 版から移したもの。公開 API をすべて JS で組み立てる）。Rust→JS は `native.xxx` 経由のみ。`Host` がスクリプト実行中の状態（Env、ループ、ブック、保持中の JS 値）。`xlsx.rs`/`xlsx_style.rs` は umya-spreadsheet、`xlsx_calc.rs` は `cell.calc()` の簡易計算、`numfmt.rs` は表示書式。`gopath.rs` は Go の filepath と同じ意味のパス関数。`remote.rs` はデバッガ用のワイヤ形式 |
+| `src/ui` | `Ui` トレイトと実装: `native`（Windows のみ。Win32 ダイアログ、IFileDialog、IProgressDialog、WebView2 ウィンドウ。`loader.rs` は WebView2Loader.dll なしでランタイムを読み込む）、`Console`、`Mock`（応答 JSON＋ログ。テスト用）。`thread.rs` の `ui::run` がスクリプトを専用スレッドで動かし、UI 呼び出しを呼び出し元（main スレッド）へ転送する。`web/` は組み込みページ（Go 版から移したもの）（`build.rs` が埋め込みリストを生成） |
 | `src/meta` | エントリ先頭の `// ==xljs==` メタデータのパースと、アセットだけを見せる `AssetFs`（`DirAssets`/`MemAssets`） |
 | `src/vba` | マクロブックの VBA ソースの読み取り（cfb で `vbaProject.bin` / `_VBA_PROJECT_CUR` を開き、MS-OVBA の解凍）。テスト用の固定データは `testdata/vba/`（Go 版のテスト用ビルダーで生成したもの） |
 | `src/i18n` | メッセージ。`locales/<lang>.json` を `include_str!`。`en.json` が基準・フォールバック |
