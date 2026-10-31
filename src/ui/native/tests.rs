@@ -202,6 +202,69 @@ fn builtin_pages() {
     }
 }
 
+/// The page that prints to PDF draws its charts in a hidden window (no
+/// requestAnimationFrame there would leave them blank).
+#[test]
+fn print_page_draws_charts_hidden() {
+    let html = r#"<!doctype html><html><head><style>@page{size:A4;margin:10mm}</style></head><body><p>グラフ</p><div class="xljs-print-chart" data-chart="0" style="position:relative;width:300pt;height:200pt"></div><div class="xljs-print-chart" data-chart="1" style="position:relative;width:300pt;height:150pt"></div></body></html>"#;
+    let charts = r#"[{"spec":{"type":"column","data":[{"a":"x","b":1},{"a":"y","b":2}]}},{"spec":{"type":"gantt","data":[{"name":"x","start":"2026-11-02","end":"2026-11-04"}]}}]"#;
+    let init = serde_json::json!({ "type": "init", "html": html, "charts": serde_json::from_str::<serde_json::Value>(charts).unwrap(), "texts": {}, "lang": "ja" }).to_string();
+    let o = WindowOptions { title: "print".into(), url: format!("{ASSET_ORIGIN}{BUILTIN_PREFIX}print.html"), assets: Some(Arc::new(BuiltinOnly)), hidden: true, ..Default::default() };
+    let got = with_page(o, |m, p| {
+        if m.contains(r#""ready""#) {
+            p.post(&init);
+        }
+        m.contains(r#""rendered""#) || m.contains(r#""error""#)
+    });
+    if skipped(&got) {
+        return;
+    }
+    assert_eq!(got.join(","), r#"{"type":"ready"},{"type":"rendered","charts":2,"drawn":2}"#);
+}
+
+/// Ui::print_pdf writes a PDF (Page.printToPDF through the DevTools protocol).
+#[test]
+fn print_pdf_writes_a_file() {
+    let _l = crate::testutil::lock_lang("ja");
+    if webview2_version().is_empty() {
+        eprintln!("WebView2 runtime not installed; skipped");
+        return;
+    }
+    let dir = crate::testutil::tempdir();
+    unsafe { std::env::set_var(crate::ui::WEBVIEW2_DATA_ENV, dir.join("wv2")) };
+    let data = std::fs::read(concat!(env!("CARGO_MANIFEST_DIR"), "/testdata/xlsx/print.xlsx")).unwrap();
+    let html = crate::api::print_html_of(&data).unwrap();
+    let path = dir.join("印刷.pdf");
+    let u = setup();
+    let result: Arc<Mutex<Option<crate::Result<()>>>> = Default::default();
+    let r2 = result.clone();
+    u.print_pdf(
+        PdfJob {
+            html,
+            charts: r#"[{"spec":{"type":"column","data":[{"a":"x","b":1},{"a":"y","b":2}]}}]"#.into(),
+            texts: "{}".into(),
+            path: path.to_string_lossy().into_owned(),
+        },
+        Box::new(move |r| *r2.lock().unwrap() = Some(r)),
+    );
+    let start = Instant::now();
+    while result.lock().unwrap().is_none() && start.elapsed() < Duration::from_secs(60) {
+        unsafe {
+            let mut m = MSG::default();
+            while PeekMessageW(&mut m, None, 0, 0, PM_REMOVE).as_bool() {
+                let _ = TranslateMessage(&m);
+                DispatchMessageW(&m);
+            }
+        }
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    let r = result.lock().unwrap().take().expect("print_pdf did not finish");
+    r.unwrap();
+    let pdf = std::fs::read(&path).unwrap();
+    assert!(pdf.starts_with(b"%PDF-"), "not a PDF");
+    assert!(pdf.len() > 10_000, "PDF of {} bytes", pdf.len());
+}
+
 /// Serves the built-in files under BUILTIN_PREFIX.
 struct BuiltinOnly;
 

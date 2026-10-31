@@ -5,7 +5,10 @@
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 use std::rc::Rc;
-use std::sync::{Arc, OnceLock, mpsc};
+use std::sync::atomic::{AtomicIsize, Ordering};
+use std::sync::{Arc, Mutex, OnceLock, mpsc};
+
+use base64::Engine as _;
 
 use webview2_com::Microsoft::Web::WebView2::Win32::*;
 use webview2_com::*;
@@ -20,7 +23,9 @@ use windows::Win32::UI::WindowsAndMessaging::*;
 use windows::core::{Interface, PCWSTR, PWSTR, w};
 
 use super::{WINDOWS, hstr, loader};
-use crate::ui::{ASSET_ORIGIN, PAGE_SCRIPT, TITLE_BAR_HEIGHT, Window, WindowOptions, icon_image, title_bar_script};
+use crate::ui::{
+    ASSET_ORIGIN, BUILTIN_PREFIX, BuiltinAssets, PAGE_SCRIPT, PdfDone, PdfJob, TITLE_BAR_HEIGHT, Window, WindowOptions, icon_image, title_bar_script,
+};
 use crate::{Error, Result, err, i18n};
 
 /// Where users get the WebView2 runtime.
@@ -139,6 +144,11 @@ fn register_class() {
 }
 
 pub(super) fn open(o: WindowOptions) -> Result<Arc<dyn Window>> {
+    let hwnd = open_hwnd(o)?;
+    Ok(Arc::new(WebWindow { hwnd: hwnd.0 as isize }))
+}
+
+fn open_hwnd(o: WindowOptions) -> Result<HWND> {
     if webview2_version().is_empty() {
         return Err(err!("ui.webview2Missing", WEBVIEW2_DOWNLOAD_URL));
     }
@@ -149,7 +159,16 @@ pub(super) fn open(o: WindowOptions) -> Result<Arc<dyn Window>> {
         // The page's size is below the bar.
         height += TITLE_BAR_HEIGHT;
     }
-    let style = if o.fixed_size { WS_OVERLAPPEDWINDOW & !(WS_THICKFRAME | WS_MAXIMIZEBOX) } else { WS_OVERLAPPEDWINDOW };
+    let style = if o.hidden {
+        WS_POPUP
+    } else if o.fixed_size {
+        WS_OVERLAPPEDWINDOW & !(WS_THICKFRAME | WS_MAXIMIZEBOX)
+    } else {
+        WS_OVERLAPPEDWINDOW
+    };
+    // A hidden window is shown but nearly transparent, so that the page
+    // renders (requestAnimationFrame) as in a visible window.
+    let ex_style = if o.hidden { WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_LAYERED | WS_EX_TRANSPARENT } else { Default::default() };
     unsafe {
         let mut dpi = GetDpiForSystem();
         if dpi == 0 {
@@ -167,7 +186,7 @@ pub(super) fn open(o: WindowOptions) -> Result<Arc<dyn Window>> {
         let x = work.left + 0.max((work.right - work.left - ww) / 2);
         let y = work.top + 0.max((work.bottom - work.top - wh) / 2);
         let hwnd = CreateWindowExW(
-            Default::default(),
+            ex_style,
             w!("xljsWindow"),
             &hstr(&o.title),
             style,
@@ -208,9 +227,14 @@ pub(super) fn open(o: WindowOptions) -> Result<Arc<dyn Window>> {
             // WM_NCCALCSIZE again, now that the state is known.
             let _ = SetWindowPos(hwnd, None, 0, 0, 0, 0, SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
         }
-        let _ = ShowWindow(hwnd, SW_SHOW);
-        let _ = UpdateWindow(hwnd);
-        let _ = SetForegroundWindow(hwnd);
+        if st.o.hidden {
+            let _ = SetLayeredWindowAttributes(hwnd, COLORREF(0), 1, LWA_ALPHA);
+            let _ = ShowWindow(hwnd, SW_SHOWNOACTIVATE);
+        } else {
+            let _ = ShowWindow(hwnd, SW_SHOW);
+            let _ = UpdateWindow(hwnd);
+            let _ = SetForegroundWindow(hwnd);
+        }
         if let Err(e) = embed(hwnd, &st) {
             // The caller learns from the error, not from on_closed.
             *st.closed.borrow_mut() = true;
@@ -218,12 +242,144 @@ pub(super) fn open(o: WindowOptions) -> Result<Arc<dyn Window>> {
             let _ = DestroyWindow(hwnd);
             return Err(e);
         }
+        if st.o.hidden {
+            return Ok(hwnd);
+        }
         WINDOWS.with(|w| w.borrow_mut().push(hwnd));
         // Not cancelled: the window stays open.
         super::notify::watch(&if title.is_empty() { "xljs".to_string() } else { title }, &crate::t!("ui.waiting"));
-        Ok(Arc::new(WebWindow { hwnd: hwnd.0 as isize }))
+        Ok(hwnd)
     }
 }
+
+/// Serves the built-in pages to the print window.
+struct PrintAssets;
+
+impl crate::meta::AssetFs for PrintAssets {
+    fn read(&self, name: &str) -> std::io::Result<Vec<u8>> {
+        match name.strip_prefix(BUILTIN_PREFIX) {
+            Some(rest) => crate::meta::AssetFs::read(&BuiltinAssets, rest),
+            None => Err(std::io::Error::new(std::io::ErrorKind::NotFound, name.to_string())),
+        }
+    }
+    fn files(&self, _root: &str) -> std::io::Result<Vec<String>> {
+        Ok(Vec::new())
+    }
+}
+
+/// Calls a DevTools protocol method of the page; f gets the result JSON.
+fn devtools(core: &ICoreWebView2, method: &str, params: &str, f: impl FnOnce(windows::core::Result<()>, String) + 'static) {
+    let handler = CallDevToolsProtocolMethodCompletedHandler::create(Box::new(move |hr, json: String| {
+        f(hr, json);
+        Ok(())
+    }));
+    unsafe {
+        if let Err(e) = core.CallDevToolsProtocolMethod(&hstr(method), &hstr(params), &handler) {
+            // The handler is not called.
+            let _ = e;
+        }
+    }
+}
+
+/// See Ui::print_pdf: web/print.html in a hidden window puts the document
+/// in place and draws its charts, then Page.printToPDF (the page sizes and
+/// margins come from the document's @page rules) writes the file.
+pub(super) fn print_pdf(job: PdfJob, done: PdfDone) {
+    let done = Arc::new(Mutex::new(Some(done)));
+    // Calls done once; true if this call did.
+    let finish: Arc<dyn Fn(Result<()>) -> bool + Send + Sync> = Arc::new(move |r| {
+        let d = done.lock().unwrap().take();
+        match d {
+            Some(d) => {
+                d(r);
+                true
+            }
+            None => false,
+        }
+    });
+    let hwnd_id = Arc::new(AtomicIsize::new(0));
+    let (f1, f2, h1) = (finish.clone(), finish.clone(), hwnd_id.clone());
+    let job = Arc::new(job);
+    let on_message: crate::ui::OnMessage = Arc::new(move |msg: String, _| {
+        let hwnd = HWND(h1.load(Ordering::SeqCst) as *mut _);
+        let Some(core) = state(hwnd).and_then(|st| st.core.borrow().clone()) else { return };
+        let Ok(m) = serde_json::from_str::<serde_json::Value>(&msg) else { return };
+        let close = move || unsafe {
+            let _ = PostMessageW(Some(hwnd), WM_CLOSE, WPARAM(0), LPARAM(0));
+        };
+        match m.get("type").and_then(|t| t.as_str()) {
+            Some("ready") => {
+                // Charts in their light colors whatever the system's theme.
+                devtools(&core, "Emulation.setEmulatedMedia", r#"{"features":[{"name":"prefers-color-scheme","value":"light"}]}"#, |_, _| {});
+                let charts: serde_json::Value = serde_json::from_str(&job.charts).unwrap_or(serde_json::json!([]));
+                let texts: serde_json::Value = serde_json::from_str(&job.texts).unwrap_or(serde_json::json!({}));
+                let init = serde_json::json!({ "type": "init", "html": job.html, "charts": charts, "texts": texts, "lang": i18n::lang() });
+                unsafe {
+                    let _ = core.PostWebMessageAsString(&hstr(&format!("{HOST_PREFIX}{init}")));
+                }
+            }
+            Some("rendered") => {
+                let (f, path) = (f1.clone(), job.path.clone());
+                let params = r#"{"printBackground":true,"preferCSSPageSize":true,"displayHeaderFooter":false,"marginTop":0,"marginBottom":0,"marginLeft":0,"marginRight":0,"transferMode":"ReturnAsBase64"}"#;
+                devtools(&core, "Page.printToPDF", params, move |hr, json| {
+                    let r = (|| -> Result<()> {
+                        hr.map_err(webview_err)?;
+                        let v: serde_json::Value = serde_json::from_str(&json)?;
+                        let data = v.get("data").and_then(|d| d.as_str()).ok_or_else(|| webview_err(&json))?;
+                        let bytes = base64::engine::general_purpose::STANDARD.decode(data).map_err(webview_err)?;
+                        std::fs::write(&path, bytes).map_err(|e| Error::Path { op: "open".into(), path: path.clone(), source: e })?;
+                        Ok(())
+                    })();
+                    f(r);
+                    close();
+                });
+            }
+            Some("error") => {
+                let message = m.get("message").and_then(|t| t.as_str()).unwrap_or("").to_string();
+                f1(Err(err!("pdf.failed", message)));
+                close();
+            }
+            _ => {}
+        }
+    });
+    let on_closed: crate::ui::OnClosed = Arc::new(move || {
+        f2(Err(err!("pdf.failed", "closed")));
+    });
+    let o = WindowOptions {
+        title: "xljs PDF".into(),
+        width: 1000,
+        height: 800,
+        url: format!("{ASSET_ORIGIN}{BUILTIN_PREFIX}print.html"),
+        assets: Some(Arc::new(PrintAssets)),
+        hidden: true,
+        on_message: Some(on_message),
+        on_closed: Some(on_closed),
+        ..Default::default()
+    };
+    match open_hwnd(o) {
+        Ok(h) => {
+            hwnd_id.store(h.0 as isize, Ordering::SeqCst);
+            // A page that never answers (it cannot load, a chart hangs)
+            // must not keep the script waiting.
+            let id = h.0 as isize;
+            std::thread::spawn(move || {
+                std::thread::sleep(PRINT_TIMEOUT);
+                // Only while the job is open: the handle may name another window later.
+                if finish(Err(err!("pdf.failed", "timeout"))) {
+                    unsafe {
+                        let _ = PostMessageW(Some(HWND(id as *mut _)), WM_CLOSE, WPARAM(0), LPARAM(0));
+                    }
+                }
+            });
+        }
+        Err(e) => {
+            finish(Err(e));
+        }
+    }
+}
+
+/// How long print_pdf waits for the page.
+const PRINT_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(120);
 
 fn webview_err(e: impl std::fmt::Display) -> Error {
     err!("ui.webviewError", e)

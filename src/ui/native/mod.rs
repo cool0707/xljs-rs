@@ -277,6 +277,10 @@ impl Ui for Native {
     fn notify(&self, title: &str, message: &str) {
         notify::show(title, message);
     }
+
+    fn print_pdf(&self, job: PdfJob, done: PdfDone) {
+        webview::print_pdf(job, done);
+    }
 }
 
 /// A progress indicator (IProgressDialog).

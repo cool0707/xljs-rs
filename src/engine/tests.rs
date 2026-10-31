@@ -90,6 +90,16 @@ fn check_script_output(name: &str, r: &Res) -> Vec<String> {
         }
     };
     match name {
+        "pdf.test.js" => want_in(
+            &r.stderr,
+            &[
+                "charts.pdf\", 8 pages, 8/9 charts)",
+                "見積.pdf\", 1 pages, 0/0 charts)",
+                "hello.pdf\", 0 pages, 0/0 charts)",
+                "print.pdf\", 4 pages, 1/1 charts)",
+            ],
+            "mock log",
+        ),
         "app.test.js" => want_in(
             &r.stderr,
             &[

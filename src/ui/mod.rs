@@ -114,7 +114,29 @@ pub struct WindowOptions {
     /// Receives what happens to the page that the page cannot report
     /// itself (tests). Called on the UI thread.
     pub trace: Option<Trace>,
+    /// Opens the window without showing it to the user (print_pdf): no
+    /// taskbar button, never activated, see-through and click-through. The
+    /// page still renders as in a shown window.
+    pub hidden: bool,
 }
+
+/// A document to turn into a PDF (Ui::print_pdf).
+#[derive(Clone, Default)]
+pub struct PdfJob {
+    /// The HTML document (its scripts do not run).
+    pub html: String,
+    /// What the page web/print.html draws into the document's chart boxes:
+    /// a JSON array of { spec } (a ChartSpec in the wire format) or
+    /// { error }.
+    pub charts: String,
+    /// The chart texts (see the prelude's chartTexts), as JSON.
+    pub texts: String,
+    /// The PDF file to write.
+    pub path: String,
+}
+
+/// Called once with the outcome of Ui::print_pdf, on any thread.
+pub type PdfDone = Box<dyn FnOnce(Result<()>) + Send>;
 
 /// The environment variable that overrides the WebView2 user data folder
 /// (default %LOCALAPPDATA%\xljs\WebView2).
@@ -168,6 +190,12 @@ pub trait Ui: Send + Sync {
     /// Shows a notification (on Windows, the one at the bottom right of
     /// the screen) and returns without waiting for it.
     fn notify(&self, _title: &str, _message: &str) {}
+    /// Writes job.html as a PDF (WebView2, without showing it) and calls
+    /// done when the file is written or the job failed. It may return
+    /// before. UIs without WebView2 fail.
+    fn print_pdf(&self, _job: PdfJob, done: PdfDone) {
+        done(Err(crate::err!("pdf.unavailable")))
+    }
 }
 
 /// A form for UIs without HTML windows. Values are strings for every field

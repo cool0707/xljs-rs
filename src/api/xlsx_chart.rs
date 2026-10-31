@@ -18,18 +18,19 @@ use umya_spreadsheet::CellRawValue;
 
 use super::xlsx::{Book, date_format_code, format_code, from_serial, parse_ref, style_is_date};
 
-/// The parts of an xlsx file that describe its charts (and how sheets
-/// reach them). Empty when the file has no charts.
+/// The parts of an xlsx file that describe its drawings (charts, shapes,
+/// pictures) and how sheets reach them. Empty when the file has no drawings.
 #[derive(Default, Debug, Clone)]
 pub struct ChartParts {
-    files: HashMap<String, Vec<u8>>,
+    pub(super) files: HashMap<String, Vec<u8>>,
 }
 
 impl ChartParts {
     pub fn collect(data: &[u8]) -> ChartParts {
         let mut files = HashMap::new();
         let Ok(mut zr) = zip::ZipArchive::new(Cursor::new(data)) else { return ChartParts { files } };
-        if !zr.file_names().any(|n| n.starts_with("xl/charts/")) {
+        // Charts, shapes and pictures all live in drawings.
+        if !zr.file_names().any(|n| n.starts_with("xl/drawings/")) {
             return ChartParts { files };
         }
         for i in 0..zr.len() {
@@ -40,6 +41,7 @@ impl ChartParts {
                 || name.starts_with("xl/worksheets/_rels/")
                 || name.starts_with("xl/drawings/")
                 || name.starts_with("xl/charts/")
+                || name.starts_with("xl/media/")
                 || name.starts_with("xl/theme/");
             let mut b = Vec::new();
             if keep && f.read_to_end(&mut b).is_ok() {
@@ -49,12 +51,12 @@ impl ChartParts {
         ChartParts { files }
     }
 
-    fn xml(&self, part: &str) -> Option<Node> {
+    pub(super) fn xml(&self, part: &str) -> Option<Node> {
         parse(self.files.get(part)?)
     }
 
     /// The relationships of a part: id -> (type, part it points to).
-    fn rels(&self, part: &str) -> HashMap<String, (String, String)> {
+    pub(super) fn rels(&self, part: &str) -> HashMap<String, (String, String)> {
         let (dir, file) = part.rsplit_once('/').unwrap_or(("", part));
         let mut out = HashMap::new();
         let Some(root) = self.xml(&format!("{dir}/_rels/{file}.rels")) else { return out };
@@ -69,7 +71,7 @@ impl ChartParts {
     }
 
     /// The part of the worksheet named sheet.
-    fn sheet_part(&self, sheet: &str) -> Option<String> {
+    pub(super) fn sheet_part(&self, sheet: &str) -> Option<String> {
         let wb = self.xml("xl/workbook.xml")?;
         let s = wb.child("sheets")?.all("sheet").find(|s| s.attr("name") == Some(sheet))?;
         let id = s.attr("id")?;
@@ -77,7 +79,7 @@ impl ChartParts {
     }
 
     /// The theme's colors by name (accent1, dk1, ...) as RRGGBB.
-    fn theme(&self) -> HashMap<String, String> {
+    pub(super) fn theme(&self) -> HashMap<String, String> {
         let mut out = HashMap::new();
         let Some(t) = self.xml("xl/theme/theme1.xml") else { return out };
         if let Some(cs) = t.find("clrScheme") {
@@ -93,7 +95,7 @@ impl ChartParts {
 }
 
 /// target relative to the folder dir ("../drawings/drawing1.xml"), or absolute ("/xl/...").
-fn resolve(dir: &str, target: &str) -> String {
+pub(super) fn resolve(dir: &str, target: &str) -> String {
     if let Some(t) = target.strip_prefix('/') {
         return t.to_string();
     }
@@ -113,21 +115,21 @@ fn resolve(dir: &str, target: &str) -> String {
 // ---- a small XML tree (local names only) ----
 
 #[derive(Default, Debug)]
-struct Node {
-    name: String,
-    attrs: Vec<(String, String)>,
-    children: Vec<Node>,
-    text: String,
+pub(super) struct Node {
+    pub name: String,
+    pub attrs: Vec<(String, String)>,
+    pub children: Vec<Node>,
+    pub text: String,
 }
 
 impl Node {
-    fn child(&self, name: &str) -> Option<&Node> {
+    pub fn child(&self, name: &str) -> Option<&Node> {
         self.children.iter().find(|c| c.name == name)
     }
-    fn all<'a>(&'a self, name: &'a str) -> impl Iterator<Item = &'a Node> + 'a {
+    pub fn all<'a>(&'a self, name: &'a str) -> impl Iterator<Item = &'a Node> + 'a {
         self.children.iter().filter(move |c| c.name == name)
     }
-    fn attr(&self, name: &str) -> Option<&str> {
+    pub fn attr(&self, name: &str) -> Option<&str> {
         self.attrs.iter().find(|(k, _)| k == name).map(|(_, v)| v.as_str())
     }
     /// The val attribute of the child named name.
@@ -138,11 +140,11 @@ impl Node {
     fn flag(&self, name: &str) -> Option<bool> {
         self.child(name).map(|c| !matches!(c.attr("val"), Some("0" | "false")))
     }
-    fn path(&self, names: &[&str]) -> Option<&Node> {
+    pub fn path(&self, names: &[&str]) -> Option<&Node> {
         names.iter().try_fold(self, |n, name| n.child(name))
     }
     /// The first descendant (or self) named name.
-    fn find(&self, name: &str) -> Option<&Node> {
+    pub fn find(&self, name: &str) -> Option<&Node> {
         if self.name == name {
             return Some(self);
         }
@@ -189,7 +191,7 @@ fn element(e: &BytesStart) -> Node {
     Node { name: local(e.name().as_ref()), attrs, ..Default::default() }
 }
 
-fn parse(xml: &[u8]) -> Option<Node> {
+pub(super) fn parse(xml: &[u8]) -> Option<Node> {
     let mut r = quick_xml::Reader::from_reader(xml);
     let mut stack = vec![Node::default()];
     let mut buf = Vec::new();
@@ -436,6 +438,17 @@ fn base_color(c: &Node, theme: &HashMap<String, String>) -> Option<String> {
     Some(match c.name.as_str() {
         "srgbClr" => c.attr("val")?.to_uppercase(),
         "sysClr" => c.attr("lastClr")?.to_uppercase(),
+        "prstClr" => match c.attr("val")? {
+            "black" => "000000",
+            "white" => "FFFFFF",
+            "red" => "FF0000",
+            "green" => "008000",
+            "blue" => "0000FF",
+            "yellow" => "FFFF00",
+            "gray" | "grey" => "808080",
+            _ => return None,
+        }
+        .to_string(),
         "schemeClr" => {
             let name = match c.attr("val")? {
                 "tx1" => "dk1",
@@ -525,7 +538,7 @@ fn from_hsl(h: f64, s: f64, l: f64) -> (f64, f64, f64) {
 }
 
 /// A color of a fill (a:solidFill and the like) as "#RRGGBB".
-fn color_of(fill: &Node, theme: &HashMap<String, String>) -> Option<String> {
+pub(super) fn color_of(fill: &Node, theme: &HashMap<String, String>) -> Option<String> {
     let c = fill.children.iter().find(|c| matches!(c.name.as_str(), "srgbClr" | "schemeClr" | "sysClr" | "prstClr"))?;
     modified(&base_color(c, theme)?, &mods_of(c))
 }
@@ -749,15 +762,13 @@ fn anchor_range(a: &Node) -> J {
     }
 }
 
-/// The charts on a sheet, in the order of its drawing.
-pub fn sheet_charts(b: &Book, sheet: &str) -> Vec<J> {
-    let mut out = Vec::new();
-    let Some(parts) = &b.charts else { return out };
+/// Calls f with the anchor, the graphic frame, the relationship type and
+/// the part of each chart on a sheet, in the order of its drawing.
+fn each_chart(parts: &ChartParts, sheet: &str, mut f: impl FnMut(&Node, &Node, &str, &str)) {
     if parts.files.is_empty() {
-        return out;
+        return;
     }
-    let Some(sheet_part) = parts.sheet_part(sheet) else { return out };
-    let theme = parts.theme();
+    let Some(sheet_part) = parts.sheet_part(sheet) else { return };
     let mut drawings: Vec<String> =
         parts.rels(&sheet_part).into_values().filter(|(t, _)| t.ends_with("/drawing")).map(|(_, p)| p).collect();
     drawings.sort();
@@ -769,22 +780,57 @@ pub fn sheet_charts(b: &Book, sheet: &str) -> Vec<J> {
             let Some(data) = frame.find("graphicData") else { continue };
             let Some(id) = data.children.iter().find(|c| c.name == "chart").and_then(|c| c.attr("id")) else { continue };
             let Some((kind, part)) = rels.get(id) else { continue };
-            let Some(root) = parts.xml(part) else { continue };
-            let mut o = if kind.ends_with("/chartEx") {
-                let mut m = Map::new();
-                m.insert("chartEx".into(), J::String(chart_ex_kind(&root)));
-                m
-            } else {
-                chart_json(b, &root, &theme, &AutoColors::new(parts, part, &theme))
-            };
-            let name = frame.path(&["nvGraphicFramePr", "cNvPr"]).and_then(|c| c.attr("name")).unwrap_or("");
-            o.insert("name".into(), J::String(name.to_string()));
-            o.insert("range".into(), anchor_range(anchor));
-            out.push(J::Object(o));
+            f(anchor, frame, kind, part);
         }
     }
+}
+
+/// The charts on a sheet, in the order of its drawing.
+pub fn sheet_charts(b: &Book, sheet: &str) -> Vec<J> {
+    let mut out = Vec::new();
+    let Some(parts) = &b.charts else { return out };
+    let theme = parts.theme();
+    each_chart(parts, sheet, |anchor, frame, kind, part| {
+        let Some(root) = parts.xml(part) else { return };
+        let mut o = if kind.ends_with("/chartEx") {
+            let mut m = Map::new();
+            m.insert("chartEx".into(), J::String(chart_ex_kind(&root)));
+            m
+        } else {
+            chart_json(b, &root, &theme, &AutoColors::new(parts, part, &theme))
+        };
+        let name = frame.path(&["nvGraphicFramePr", "cNvPr"]).and_then(|c| c.attr("name")).unwrap_or("");
+        o.insert("name".into(), J::String(name.to_string()));
+        o.insert("range".into(), anchor_range(anchor));
+        out.push(J::Object(o));
+    });
     out
 }
+
+/// Where a drawing object is on its sheet: the cell markers (zero-based
+/// column and row, offsets in EMU) and/or the size and position in EMU.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct Anchor {
+    pub from: Option<(u32, i64, u32, i64)>,
+    pub to: Option<(u32, i64, u32, i64)>,
+    pub ext: Option<(i64, i64)>,
+    pub pos: Option<(i64, i64)>,
+}
+
+/// The anchor of a drawing (twoCellAnchor, oneCellAnchor, absoluteAnchor).
+pub(super) fn anchor_of(a: &Node) -> Anchor {
+    let marker = |n: &str| -> Option<(u32, i64, u32, i64)> {
+        let m = a.child(n)?;
+        let num = |k: &str| m.child(k).and_then(|c| c.text.trim().parse::<i64>().ok());
+        Some((num("col")? as u32, num("colOff").unwrap_or(0), num("row")? as u32, num("rowOff").unwrap_or(0)))
+    };
+    let pair = |n: &str, x: &str, y: &str| -> Option<(i64, i64)> {
+        let e = a.child(n)?;
+        Some((e.attr(x)?.parse().ok()?, e.attr(y)?.parse().ok()?))
+    };
+    Anchor { from: marker("from"), to: marker("to"), ext: pair("ext", "cx", "cy"), pos: pair("pos", "x", "y") }
+}
+
 
 #[cfg(test)]
 mod tests {

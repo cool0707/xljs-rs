@@ -788,6 +788,7 @@
     exit: (code = 0) => native.exit(code),
     env: (name) => native.getenv(String(name)),
     inspect,
+    htmlToPdf: (html, dest, options) => htmlToPdf(html, dest, options),
   };
   defineGlobal("xljs", xljsObj);
   defineGlobal("exit", xljsObj.exit);
@@ -3016,6 +3017,104 @@
     toSpec(opts = {}) { return excelChartSpec(this._raw, opts || {}).spec; }
   }
 
+  // ---------------------------------------------------------------- PDF
+  //
+  // book.toPdf / sheet.toPdf: the native side lays the sheets out as Excel
+  // would print them (src/api/xlsx_print.rs) and the page web/print.html
+  // draws the charts into it before WebView2 prints it (Ui::print_pdf).
+
+  /** The options of toPdf / toHtml for the native side (sheets: names forced by a sheet). */
+  function printOptions(book, o, sheets) {
+    if (o !== undefined && o !== null && (typeof o !== "object" || Array.isArray(o))) throw new TypeError(T("pdf.badOptions"));
+    o = o || {};
+    const r = { title: o.title === undefined || o.title === null ? "" : String(o.title) };
+    if (sheets) r.sheets = sheets;
+    else if (o.sheets !== undefined && o.sheets !== null) {
+      r.sheets = Array.from(o.sheets).map((x) => {
+        const sh = x instanceof Worksheet ? x : book.sheet(typeof x === "number" ? x : String(x));
+        if (!sh) throw new TypeError(T("pdf.noSheet", String(x)));
+        return sh.name;
+      });
+    }
+    if (o.paper !== undefined && o.paper !== null) r.paper = String(o.paper);
+    if (o.landscape !== undefined && o.landscape !== null) r.landscape = !!o.landscape;
+    const pages = (v, k) => {
+      if (v === undefined || v === null) return undefined;
+      const x = v === true ? 1 : v === false ? 0 : Number(v);
+      if (!(x >= 0) || x !== Math.floor(x)) throw new TypeError(T("pdf.badNumber", k));
+      return x;
+    };
+    if (o.fitToPage === true) { r.fitToWidth = 1; r.fitToHeight = 1; }
+    const fw = pages(o.fitToWidth, "fitToWidth"), fh = pages(o.fitToHeight, "fitToHeight");
+    if (fw !== undefined) { r.fitToWidth = fw; if (fh === undefined && o.fitToPage !== true) r.fitToHeight = 0; }
+    if (fh !== undefined) { r.fitToHeight = fh; if (fw === undefined && o.fitToPage !== true) r.fitToWidth = 0; }
+    if (o.scale !== undefined && o.scale !== null) {
+      const sc = Number(o.scale);
+      if (!(sc >= 10 && sc <= 400)) throw new TypeError(T("pdf.badNumber", "scale"));
+      r.scale = sc;
+    }
+    if (o.margin !== undefined && o.margin !== null) {
+      const m = o.margin;
+      const num = (v, k) => {
+        if (v === undefined || v === null) return undefined;
+        const x = Number(v);
+        if (!(x >= 0)) throw new TypeError(T("pdf.badNumber", k));
+        return x;
+      };
+      r.margin = typeof m === "object"
+        ? { top: num(m.top, "margin.top"), right: num(m.right, "margin.right"), bottom: num(m.bottom, "margin.bottom"), left: num(m.left, "margin.left") }
+        : { top: num(m, "margin"), right: num(m, "margin"), bottom: num(m, "margin"), left: num(m, "margin") };
+    }
+    if (o.gridLines !== undefined && o.gridLines !== null) r.gridLines = !!o.gridLines;
+    if (o.centerHorizontally !== undefined && o.centerHorizontally !== null) r.centerHorizontally = !!o.centerHorizontally;
+    if (o.charts === false) r.charts = false;
+    return r;
+  }
+
+  /** { html, charts: [{ sheet, index }], pages } of the sheets of book. */
+  function printLayout(book, options, sheets) {
+    return JSON.parse(native.xlsxPrintHtml(book._h, JSON.stringify(printOptions(book, options, sheets))));
+  }
+
+  /** Prints html (with charts: [{ spec } | { error }]) to dest; resolves to its full path. */
+  async function printHtml(html, charts, dest, what) {
+    const path = native.pathResolve(toPath(dest, what));
+    const err = await native.pdfPrint(html, JSON.stringify(charts), JSON.stringify(chartTexts()), path);
+    if (err) throw new Error(err);
+    return path;
+  }
+
+  async function printToPdf(book, dest, options, sheets) {
+    const layout = printLayout(book, options, sheets);
+    const bySheet = new Map();
+    const charts = layout.charts.map((ref) => {
+      if (!bySheet.has(ref.sheet)) bySheet.set(ref.sheet, book.sheet(ref.sheet).charts);
+      const ch = bySheet.get(ref.sheet)[ref.index];
+      if (!ch) return { error: "" };
+      if (!ch.supported) return { error: T("pdf.chartUnsupported", ch.name, ch.warnings[0] || "") };
+      try {
+        return { spec: chartInit(chartOf(ch.toSpec())).spec };
+      } catch (e) {
+        return { error: T("pdf.chartUnsupported", ch.name, e.message) };
+      }
+    });
+    return printHtml(layout.html, charts, dest, "toPdf()");
+  }
+
+  /** xljs.htmlToPdf: options.paper / landscape / margin (mm) become an @page rule before the document's own. */
+  function htmlToPdf(html, dest, options) {
+    if (typeof html !== "string") throw new TypeError(T("pdf.expectedHtml"));
+    const o = options || {};
+    const paper = o.paper === undefined || o.paper === null ? "A4" : String(o.paper);
+    if (!/^[A-Za-z0-9]+$/.test(paper)) throw new TypeError(T("pdf.badPaperName", paper));
+    const mm = (v) => { const x = Number(v); if (!(x >= 0)) throw new TypeError(T("pdf.badNumber", "margin")); return `${x}mm`; };
+    const m = o.margin === undefined || o.margin === null ? 15 : o.margin;
+    const margin = typeof m === "object" ? [m.top, m.right, m.bottom, m.left].map((x) => mm(x === undefined ? 15 : x)).join(" ") : mm(m);
+    const rule = `<style>@page{size:${paper}${o.landscape ? " landscape" : ""};margin:${margin}}html{-webkit-print-color-adjust:exact;print-color-adjust:exact}</style>`;
+    const doc = /<head[^>]*>/i.test(html) ? html.replace(/<head[^>]*>/i, (h) => h + rule) : `<!doctype html><html><head><meta charset="utf-8">${rule}</head><body>${html}</body></html>`;
+    return printHtml(doc, [], dest, "htmlToPdf()");
+  }
+
   // ---------------------------------------------------------------- csv
 
   /**
@@ -3369,6 +3468,10 @@
     get charts() {
       return JSON.parse(native.xlsxCharts(this._book._h, this._name)).map((raw) => new ExcelChart(this, reviveExcel(raw)));
     }
+    /** The sheet as it would be printed, as an HTML document (charts are empty boxes). */
+    toHtml(options) { return printLayout(this._book, options, [this._name]).html; }
+    /** Writes the sheet as Excel would print it to a PDF file (WebView2); resolves to its full path. */
+    toPdf(dest, options) { return printToPdf(this._book, dest, options, [this._name]); }
     get dimension() { return native.xlsxDimension(this._book._h, this._name); }
     get rowCount() { return native.xlsxRowCount(this._book._h, this._name); }
     /** setColumnWidth("A", 20) or setColumnWidth("A:C", 20) */
@@ -3452,6 +3555,10 @@
       native.xlsxSave(this._h, dest === undefined || dest === null ? "" : toPath(dest, "save()"));
       return this;
     }
+    /** The sheets as they would be printed, as an HTML document (charts are empty boxes). */
+    toHtml(options) { return printLayout(this, options).html; }
+    /** Writes the sheets (every visible one, or options.sheets) as Excel would print them to a PDF file; resolves to its full path. */
+    toPdf(dest, options) { return printToPdf(this, dest, options); }
     toArrayBuffer() { return native.xlsxToBytes(this._h); }
     toBlob() { return new Blob([native.xlsxToBytes(this._h)], { type: XLSX_MIME }); }
     /** Default font of the workbook: { name, size } */
