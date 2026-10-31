@@ -3,7 +3,8 @@
 // 前回の入力内容は remember: true で次回の初期値になる。
 const values = await ui.form({
   title: "売上集計",
-  icon: "chart-column", // Font Awesome のアイコン（ページ先頭にタイトルと表示）
+  titleBar: "custom",   // OS のタイトルバーの代わりに自前のタイトルバーを使う
+  icon: "chart-column", // 自前のタイトルバーでタイトルの前に出す Font Awesome のアイコン
   description: "フォルダ内（サブフォルダ含む）の Excel ファイルの「明細」シートを顧客ごとに集計します。",
   // { group, fields } で見出しの下に項目をまとめる（値は 1 つのオブジェクトにまとまる）
   fields: [

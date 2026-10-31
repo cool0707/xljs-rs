@@ -4,6 +4,7 @@
 // @assets ui
 // @title  アプリのテスト
 // @size   640x480
+// @titlebar custom
 // ==/xljs==
 import { ok, equal, throws } from "./_assert.js";
 
@@ -17,6 +18,9 @@ app.main.close(); // closing again is harmless
 const sub = app.open({ html: "ui/sub page.html", title: "詳細", width: 300, height: 200 });
 await sub.closed;
 await app.open({ html: "ui/sub page.html", title: "固定", width: 320, height: 240, resizable: false }).closed;
+await app.open({ html: "ui/sub page.html", title: "自前", titleBar: "custom", icon: "fa-regular fa-calendar" }).closed;
+await app.open({ html: "ui/sub page.html", title: "OS", titleBar: "system", icon: "calendar" }).closed;
+throws(() => app.open({ titleBar: "none" }), /titleBar/);
 equal(app.open().closed instanceof Promise, true, "empty page");
 throws(() => app.open({ html: "../outside.html" }), /相対パス/);
 throws(() => app.open("ui/missing.html"), /見つかりません/);

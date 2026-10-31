@@ -14,6 +14,32 @@ pub const BUILTIN_PREFIX: &str = "_xljs/";
 /// run in every page of the script before the page's own scripts.
 pub const PAGE_SCRIPT: &str = include_str!("web/xljs.js");
 
+/// The custom title bar (WindowOptions::custom_title_bar).
+const TITLE_BAR_SCRIPT: &str = include_str!("web/titlebar.js");
+
+/// The height of the custom title bar in logical pixels
+/// (--xljs-titlebar-height in web/titlebar.js).
+pub const TITLE_BAR_HEIGHT: i64 = 32;
+
+/// The script that puts the custom title bar into every page of a window
+/// with WindowOptions::custom_title_bar. non_client tells whether the
+/// WebView supports CSS app-region (dragging the window by the bar).
+pub fn title_bar_script(o: &super::WindowOptions, non_client: bool) -> String {
+    let cfg = serde_json::json!({
+        "title": o.title,
+        "icon": o.title_icon,
+        "fixedSize": o.fixed_size,
+        "nonClient": non_client,
+        "texts": {
+            "minimize": crate::t!("window.minimize"),
+            "maximize": crate::t!("window.maximize"),
+            "restore": crate::t!("window.restore"),
+            "close": crate::t!("window.close"),
+        },
+    });
+    format!("window.__xljsTitleBar = {cfg};\n{TITLE_BAR_SCRIPT}")
+}
+
 /// A built-in file (form.html, table.html, their scripts and styles, Font
 /// Awesome Free, the debugger page) by its path under web/.
 pub fn builtin_file(name: &str) -> Option<&'static [u8]> {

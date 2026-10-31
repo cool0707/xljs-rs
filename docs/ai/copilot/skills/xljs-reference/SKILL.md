@@ -268,7 +268,7 @@ if (!v) exit();
 | `table` | 表から選んだ行（`rows` `columns` `selectable: true | "single"`） |
 
 - 項目の共通オプション: `label` `default` `required` `placeholder`（`select` では未選択の表示になり、初期値が `""`）`help`（説明文）`tooltip`（マウスを重ねたときの説明。ボタンにも付けられる）、`validate(value, values)`（項目ごとの検証。メッセージを返す。入力欄を離れたときにも検証される）。フォームの `validate(values)` は送信時だけ。
-- ウィンドウの大きさは `width` `height`（既定は項目数から決める）。`resizable: false` で大きさを固定する（枠のドラッグ・最大化ができない）。
+- ウィンドウの大きさは `width` `height`（既定は項目数から決める）。`resizable: false` で大きさを固定する（枠のドラッグ・最大化ができない）。`titleBar: "custom"` で OS のタイトルバーの代わりに自前のタイトルバー（`icon` とタイトル、最小化・最大化・閉じる）を表示する（`ui.table` / `app.open` も同じ。メインウィンドウは `@titlebar custom`）。
 - `onChange(value, values, ctx)`: ユーザーが値を変え、その項目の検証が通ったときに呼ばれる。`ctx.setValue(name, value)` でほかの項目を埋められる（setValue で変えた項目の onChange は呼ばれない）。
 
 ```js
@@ -292,7 +292,7 @@ await ui.form({
 ```
 - `tabs: [{ label: "基本", fields: [...] }, { label: "詳細", fields: [...] }]` でタブ分け。
 - `fields` に `{ group: "出力", icon: "file-export", help: "説明", fields: [...] }` を項目と並べて書くと見出し付きのグループになる（タブの中でも可。値は項目と同じく 1 つのオブジェクト）。
-- アイコン（Font Awesome Free の名前。`"folder-open"` など）: 項目・タブ・ボタンの `icon`、送信ボタンは `submitIcon`。フォームの `icon` でページの先頭にアイコン付きのタイトルを出す。
+- アイコン（Font Awesome Free の名前。`"folder-open"` など）: 項目・タブ・ボタンの `icon`、送信ボタンは `submitIcon`。フォームの `icon` は `titleBar: "custom"` のときだけタイトルバーに出る（それ以外は無視）。
 - `table` に `editable: true` を付けるとセルをその場で編集でき、入力のたびに検証してエラーのセルを赤く表示する（エラーが残っていると送信できない）。検証を通った値は元の行オブジェクトに書き込まれる。
 
 ```js

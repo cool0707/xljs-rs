@@ -21,7 +21,7 @@ use serde::{Deserialize, Serialize};
 use crate::Result;
 use crate::meta::AssetFs;
 
-pub use builtin::{BUILTIN_PREFIX, BuiltinAssets, PAGE_SCRIPT, builtin_file};
+pub use builtin::{BUILTIN_PREFIX, BuiltinAssets, PAGE_SCRIPT, TITLE_BAR_HEIGHT, builtin_file, title_bar_script};
 pub(crate) use builtin::dayjs_files;
 pub use console::Console;
 pub use icon::{check_icon, icon_image};
@@ -87,6 +87,11 @@ pub struct WindowOptions {
     /// Keeps the window at its size: no resizing border and no maximize
     /// button.
     pub fixed_size: bool,
+    /// Hides the OS title bar: every page shows its own (web/titlebar.js)
+    /// with title_icon (Font Awesome classes, "" for none) and the title.
+    /// The size is still that of the page below the bar.
+    pub custom_title_bar: bool,
+    pub title_icon: String,
     /// The first page; "" shows an empty page. Pages under ASSET_ORIGIN are
     /// served from assets.
     pub url: String,
