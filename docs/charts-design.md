@@ -194,7 +194,9 @@ Excel にはガントチャートの種類がなく、ふつうは「横棒の�
 | 自前のページ部品（`chart.js` `numfmt.js` `chart.html` `chart-page.js` `chart.css`） | 36,395 |
 | 埋め込みの合計 | 1,516,561（約 1.45 MiB） |
 
-実行ファイルの増加量（Linux x64 のリリースビルドで比較。`opt-level = "s"`、LTO、strip）は下の「計測」に記す。
+実行ファイルの増加量（Linux x64 のリリースビルドで比較。`opt-level = "s"`、LTO、strip）:
+9,198,360 → 10,823,512 バイト（**+1,625,152 バイト、約 1.55 MiB、+17.7%**）。埋め込みの 1.52MB に、prelude と `xlsx_chart.rs` の分が加わる。
+Windows 版も埋め込みの分はほぼ同じだけ増える。
 圧縮して埋め込むなら AG Charts は gzip -9 で 422,102 バイト（約 30%）になるので、配信時に `Content-Encoding: gzip` を付ける形が候補。
 
 ## 6. テスト
