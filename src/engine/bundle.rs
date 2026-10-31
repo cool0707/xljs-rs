@@ -296,7 +296,7 @@ impl Bundler {
         let mut code = String::new();
         let mut maps: Vec<(&SourceMap, u32)> = Vec::new();
         let mut line = 0u32;
-        let mut push = |code: &mut String, s: &str, line: &mut u32| {
+        let push = |code: &mut String, s: &str, line: &mut u32| {
             code.push_str(s);
             *line += s.matches('\n').count() as u32;
         };

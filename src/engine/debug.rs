@@ -17,7 +17,7 @@ use super::{Mapper, Options, ScriptError, clean_stack};
 use crate::api::remote::Remote;
 use crate::api::{Env, Host, prelude_source};
 use crate::meta::{AssetFs, MemAssets};
-use crate::ui::{ASSET_ORIGIN, BUILTIN_PREFIX, BuiltinAssets, Window, WindowOptions};
+use crate::ui::{BUILTIN_PREFIX, BuiltinAssets, Window, WindowOptions};
 use crate::{Error, Result, err, i18n, t};
 
 /// The URL of the debugger window (ui/web/debug.html).
@@ -203,7 +203,6 @@ impl Session {
     }
 }
 
-use std::io::Write as _;
 
 static BUNDLE_FRAME: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(&format!(r"[^\s(]*{}:(\d+):(\d+)", regex::escape(&format!("{BUILTIN_PREFIX}debug/bundle.js")))).unwrap());

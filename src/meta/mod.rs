@@ -24,7 +24,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{Result, err, t};
 
-pub use assets::{AssetFs, DirAssets, MemAssets, covered};
+pub use assets::{AssetFs, DirAssets, MemAssets, covered, valid_path as assets_valid_path};
 
 pub const MODE_CONSOLE: &str = "console";
 pub const MODE_APP: &str = "app";

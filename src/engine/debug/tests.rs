@@ -14,7 +14,7 @@ use super::*;
 use crate::engine::loop_::Shared;
 use crate::engine::tests::{run_script_in, test_scripts};
 use crate::testutil::{lock_lang, repo_path};
-use crate::ui::{FormOptions, Mock, PickerOptions, Progress, ProgressOptions, TableOptions, Ui};
+use crate::ui::{ASSET_ORIGIN, FormOptions, Mock, PickerOptions, Progress, ProgressOptions, TableOptions, Ui};
 
 /// What broke in fake pages (not in the scripts).
 static PAGE_ERRORS: Mutex<Vec<String>> = Mutex::new(Vec::new());

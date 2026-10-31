@@ -250,13 +250,6 @@ pub fn date_fields(v: &Value) -> Option<(i32, u32, u32, u32, u32, u32, u32)> {
     ))
 }
 
-/// The time value of a Date (NaN when invalid).
-pub fn date_value(v: &Value) -> f64 {
-    let Some(o) = v.as_object() else { return f64::NAN };
-    let f: Option<Function> = o.get("getTime").ok();
-    f.and_then(|f| f.call::<_, f64>((rquickjs::function::This(o.clone()),)).ok()).unwrap_or(f64::NAN)
-}
-
 /// A property of an object (undefined when missing).
 pub fn get<'js>(o: &Value<'js>, key: &str) -> Value<'js> {
     o.as_object().and_then(|o| o.get::<_, Value>(key).ok()).unwrap_or_else(|| Value::new_undefined(o.ctx().clone()))

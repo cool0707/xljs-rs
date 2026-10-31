@@ -338,7 +338,7 @@ fn write_out(out: &Out, s: &str) {
     let _ = o.flush();
 }
 
-use std::io::Write as _;
+
 
 fn install_core(n: &N) {
     n.set("stdout", |h, a| {

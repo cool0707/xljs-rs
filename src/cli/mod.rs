@@ -54,7 +54,7 @@ fn parse_flags(args: &[String]) -> Result<(Flags, Vec<String>)> {
             Some((n, v)) => (n, Some(v.to_string())),
             None => (body, None),
         };
-        let mut take = |i: &mut usize| -> Result<String> {
+        let take = |i: &mut usize| -> Result<String> {
             if let Some(v) = &value {
                 return Ok(v.clone());
             }

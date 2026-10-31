@@ -15,6 +15,11 @@ path = "src/lib.rs"
 name = "xljs"
 path = "src/main.rs"
 
+[features]
+# Build for the console subsystem (xljsc.exe); without it the Windows exe is
+# a GUI program (xljs.exe) that attaches to the terminal it was started from.
+console = []
+
 [dependencies]
 rquickjs = { version = "0.14", features = ["classes", "properties", "macro"] }
 oxc = { version = "0.156", features = ["transformer", "codegen", "semantic", "ast_visit"] }
@@ -53,6 +58,10 @@ windows = { version = "0.62", features = [
   "Win32_UI_Shell",
   "Win32_UI_Shell_Common",
   "Win32_UI_WindowsAndMessaging",
+  "Win32_System_DataExchange",
+  "Win32_System_Memory",
+  "Win32_System_Diagnostics_Debug",
+  "Win32_System_Registry",
 ] }
 windows-core = "0.62"
 webview2-com = "0.39"

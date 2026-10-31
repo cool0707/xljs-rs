@@ -201,6 +201,7 @@ mod tests {
     use super::*;
 
     #[test]
+    #[cfg(not(windows))]
     fn go_semantics() {
         assert_eq!(clean("a/../b/./c/"), "b/c");
         assert_eq!(clean(""), ".");
@@ -215,5 +216,19 @@ mod tests {
         assert_eq!(rel("/a/b", "/a/c/d").unwrap(), "../c/d");
         assert_eq!(rel("a", "a").unwrap(), ".");
         assert!(rel("/a", "b").is_err());
+    }
+
+    #[test]
+    #[cfg(windows)]
+    fn go_semantics_windows() {
+        assert_eq!(clean("a/../b/./c/"), r"b\c");
+        assert_eq!(clean(r"C:\x\..\y"), r"C:\y");
+        assert_eq!(join(&["C:\\a".into(), "b".into()]), r"C:\a\b");
+        assert_eq!(dir(r"C:\a\b.txt"), r"C:\a");
+        assert_eq!(dir(r"C:\b.txt"), r"C:\");
+        assert_eq!(base(r"C:\a\b.txt"), "b.txt");
+        assert!(is_abs(r"C:\a") && !is_abs(r"\a") && !is_abs("C:a") && is_abs(r"\\srv\share\x"));
+        assert_eq!(rel(r"C:\a\b", r"C:\a\c\d").unwrap(), r"..\c\d");
+        assert_eq!(rel(r"c:\A", r"C:\a\x").unwrap(), "x");
     }
 }
