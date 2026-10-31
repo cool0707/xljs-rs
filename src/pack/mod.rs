@@ -80,7 +80,7 @@ pub fn read(file: &Path) -> Result<Option<Payload>> {
         return Ok(Some(Payload { name, code: buf[4 + n..].to_vec(), meta: None, assets: None }));
     }
     let mut zr = zip::ZipArchive::new(io::Cursor::new(buf)).map_err(|_| corrupt())?;
-    let mut read_entry = |zr: &mut zip::ZipArchive<io::Cursor<Vec<u8>>>, name: &str| -> Result<Vec<u8>> {
+    let read_entry = |zr: &mut zip::ZipArchive<io::Cursor<Vec<u8>>>, name: &str| -> Result<Vec<u8>> {
         let mut e = zr.by_name(name).map_err(|_| corrupt())?;
         let mut data = Vec::new();
         e.read_to_end(&mut data).map_err(|_| corrupt())?;

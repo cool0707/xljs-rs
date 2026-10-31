@@ -1,3 +1,4 @@
+#![allow(deprecated)] // quick-xml unescape_value
 use std::collections::HashMap;
 use std::io::{Read, Seek};
 
