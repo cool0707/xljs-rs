@@ -220,12 +220,17 @@ impl Ui for Mock {
     /// it without doing anything (unless an "app" scenario is queued).
     fn open_window(&self, o: WindowOptions) -> Result<Arc<dyn Window>> {
         self.logf(&format!(
-            "window.open({}, {}, {}x{}{})",
+            "window.open({}, {}, {}x{}{}{})",
             quote(&o.title),
             quote(&o.url),
             o.width,
             o.height,
-            if o.fixed_size { ", fixed" } else { "" }
+            if o.fixed_size { ", fixed" } else { "" },
+            match (o.custom_title_bar, o.title_icon.is_empty()) {
+                (false, _) => String::new(),
+                (true, true) => ", titlebar".into(),
+                (true, false) => format!(", titlebar {}", quote(&o.title_icon)),
+            }
         ));
         if !o.icon.is_empty() {
             self.logf(&format!("window.icon({} bytes)", o.icon.len()));

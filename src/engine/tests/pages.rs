@@ -232,12 +232,14 @@ fn form_and_table_windows() {
                 "init fields = {got}"
             );
             // Icons: a bare name is the solid icon, classes are kept (bad words dropped).
+            // The form icon goes to the custom title bar (not to the page).
             check!(
                 p,
-                init["icon"] == "fa-solid fa-table" && init["title"] == "窓" && init["submitIcon"] == "fa-regular fa-circle-play",
-                "init icon = {}, title = {}, submitIcon = {}",
-                init["icon"],
-                init["title"],
+                p.w.o.custom_title_bar && p.w.o.title_icon == "fa-solid fa-table" && p.w.o.title == "窓" && init["submitIcon"] == "fa-regular fa-circle-play" && init.get("icon").is_none(),
+                "title bar = {} {:?} {:?}, submitIcon = {}",
+                p.w.o.custom_title_bar,
+                p.w.o.title_icon,
+                p.w.o.title,
                 init["submitIcon"]
             );
             check!(p, got.contains(r#""icon":"fa-solid fa-folder-open""#) && got.contains(r#""icon":"fa-brands fa-windows""#), "field icons = {got}");
@@ -336,7 +338,7 @@ fn form_and_table_windows() {
     ];
     let u = PageUi::new(r#"{"showDirectoryPicker": ["data"], "showSaveFilePicker": ["out.csv", "out.xlsx"]}"#, Some(log.sink()), pages);
     let src = r#"
-const v = await ui.form({ title: "窓", icon: "table", submitIcon: "fa-regular fa-circle-play", fields: [
+const v = await ui.form({ title: "窓", titleBar: "custom", icon: "table", submitIcon: "fa-regular fa-circle-play", fields: [
   { name: "src", label: "フォルダ", type: "folder", required: true, icon: "folder-open" },
   { name: "n", type: "number", icon: "bad<icon> fa-brands  fa-windows" },
   { name: "mode", type: "select", options: ["顧客別", "商品別"] },

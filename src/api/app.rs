@@ -73,11 +73,13 @@ pub(super) fn install(n: &N) {
     n.val("appHTML", env.meta.html.clone());
     n.val("appWidth", env.meta.width as f64);
     n.val("appHeight", env.meta.height as f64);
+    n.val("appTitleBar", env.meta.title_bar.clone());
     n.val("supportsWindows", env.ui.supports_windows());
     let assets: Arc<dyn AssetFs> = Arc::new(WindowAssets { app: env.assets.clone() });
     // The @icon file, read when the first window opens.
     let icon: std::rc::Rc<std::cell::RefCell<Option<Vec<u8>>>> = Default::default();
-    // appOpen(html, title, width, height, onMessage(msg, files), fixedSize) ->
+    // appOpen(html, title, width, height, onMessage(msg, files), fixedSize,
+    //         customTitleBar, titleIcon) ->
     // {close(), closed: Promise, post(msg), isClosed(), cancelRequested(), clearCancel()}
     n.set("appOpen", move |h, a| {
         let html = a.str(0);
@@ -109,6 +111,8 @@ pub(super) fn install(n: &N) {
             width: a.int(2),
             height: a.int(3),
             fixed_size: a.bool(5),
+            custom_title_bar: a.bool(6),
+            title_icon: if a.bool(6) { a.str(7) } else { String::new() },
             url,
             assets: Some(assets.clone()),
             debug: h.env.debug,

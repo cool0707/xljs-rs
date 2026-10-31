@@ -2,7 +2,7 @@
 //! window's assets; the page runtime (web/xljs.js) is injected into every
 //! page; navigation away from the app opens the default browser instead.
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 use std::rc::Rc;
 use std::sync::{Arc, OnceLock, mpsc};
@@ -14,12 +14,13 @@ use windows::Win32::Graphics::Gdi::UpdateWindow;
 use windows::Win32::System::Com::CoTaskMemFree;
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows::Win32::UI::HiDpi::GetDpiForSystem;
+use windows::Win32::UI::Input::KeyboardAndMouse::ReleaseCapture;
 use windows::Win32::UI::Shell::{ExtractIconExW, SHCreateMemStream};
 use windows::Win32::UI::WindowsAndMessaging::*;
 use windows::core::{Interface, PCWSTR, PWSTR, w};
 
 use super::{WINDOWS, hstr, loader};
-use crate::ui::{ASSET_ORIGIN, PAGE_SCRIPT, Window, WindowOptions, icon_image};
+use crate::ui::{ASSET_ORIGIN, PAGE_SCRIPT, TITLE_BAR_HEIGHT, Window, WindowOptions, icon_image, title_bar_script};
 use crate::{Error, Result, err, i18n};
 
 /// Where users get the WebView2 runtime.
@@ -31,6 +32,12 @@ const DEFAULT_HEIGHT: i64 = 640;
 /// Host → page messages start with this, so that page scripts can tell them
 /// from anything else they receive.
 const HOST_PREFIX: &str = "\u{2}";
+
+/// Page → host messages that the window handles itself (the custom title
+/// bar, web/titlebar.js): "minimize", "maximize" (toggles), "close",
+/// "drag" (moves the window with the mouse) and "state" (asks for
+/// __xljsTitleBarState).
+const WINDOW_COMMAND_PREFIX: &str = "\u{1}window:";
 
 /// The version of the installed WebView2 runtime ("" when missing).
 pub(crate) fn webview2_version() -> String {
@@ -44,6 +51,7 @@ struct WinState {
     env: RefCell<Option<ICoreWebView2Environment>>,
     icons: [HICON; 2], // big, small (from o.icon; destroyed with the window)
     closed: RefCell<bool>,
+    active: Cell<bool>,
 }
 
 thread_local! {
@@ -136,7 +144,11 @@ pub(super) fn open(o: WindowOptions) -> Result<Arc<dyn Window>> {
     }
     register_class();
     let width = if o.width > 0 { o.width } else { DEFAULT_WIDTH };
-    let height = if o.height > 0 { o.height } else { DEFAULT_HEIGHT };
+    let mut height = if o.height > 0 { o.height } else { DEFAULT_HEIGHT };
+    if o.custom_title_bar {
+        // The page's size is below the bar.
+        height += TITLE_BAR_HEIGHT;
+    }
     let style = if o.fixed_size { WS_OVERLAPPEDWINDOW & !(WS_THICKFRAME | WS_MAXIMIZEBOX) } else { WS_OVERLAPPEDWINDOW };
     unsafe {
         let mut dpi = GetDpiForSystem();
@@ -145,6 +157,10 @@ pub(super) fn open(o: WindowOptions) -> Result<Arc<dyn Window>> {
         }
         let mut r = RECT { left: 0, top: 0, right: (width * dpi as i64 / 96) as i32, bottom: (height * dpi as i64 / 96) as i32 };
         let _ = AdjustWindowRectEx(&mut r, style, false, Default::default());
+        if o.custom_title_bar {
+            // No caption or top border (see WM_NCCALCSIZE).
+            r.top = 0;
+        }
         let (ww, wh) = (r.right - r.left, r.bottom - r.top);
         let mut work = RECT::default();
         let _ = SystemParametersInfoW(SPI_GETWORKAREA, 0, Some(&mut work as *mut _ as *mut _), Default::default());
@@ -184,8 +200,13 @@ pub(super) fn open(o: WindowOptions) -> Result<Arc<dyn Window>> {
             env: RefCell::new(None),
             icons,
             closed: RefCell::new(false),
+            active: Cell::new(true),
         });
         STATES.with(|s| s.borrow_mut().insert(hwnd.0 as isize, st.clone()));
+        if st.o.custom_title_bar {
+            // WM_NCCALCSIZE again, now that the state is known.
+            let _ = SetWindowPos(hwnd, None, 0, 0, 0, 0, SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
+        }
         let _ = ShowWindow(hwnd, SW_SHOW);
         let _ = UpdateWindow(hwnd);
         let _ = SetForegroundWindow(hwnd);
@@ -256,9 +277,14 @@ fn embed(hwnd: HWND, st: &Rc<WinState>) -> Result<()> {
             let _ = s.SetAreDefaultContextMenusEnabled(st.o.debug);
             let _ = s.SetIsStatusBarEnabled(false);
         }
+        // CSS app-region: drag for the custom title bar (WebView2 1.0.2420+;
+        // older runtimes move the window on the page's request).
+        let non_client = st.o.custom_title_bar
+            && core.Settings().ok().and_then(|s| s.cast::<ICoreWebView2Settings9>().ok()).is_some_and(|s| s.SetIsNonClientRegionSupportEnabled(true).is_ok());
 
         // Messages from the page, with the paths of attached files.
         let on_message = st.o.on_message.clone();
+        let hwnd_id = hwnd.0 as isize;
         let mut token = 0i64;
         core.add_WebMessageReceived(
             &WebMessageReceivedEventHandler::create(Box::new(move |_, args: Option<ICoreWebView2WebMessageReceivedEventArgs>| {
@@ -268,6 +294,10 @@ fn embed(hwnd: HWND, st: &Rc<WinState>) -> Result<()> {
                     return Ok(());
                 }
                 let msg = take_pwstr(p);
+                if let Some(cmd) = msg.strip_prefix(WINDOW_COMMAND_PREFIX) {
+                    window_command(HWND(hwnd_id as *mut _), cmd);
+                    return Ok(());
+                }
                 let files = attached_files(&args);
                 if let Some(f) = &on_message {
                     f(msg, files);
@@ -354,6 +384,9 @@ fn embed(hwnd: HWND, st: &Rc<WinState>) -> Result<()> {
 
         // The page runtime, in every page.
         let _ = core.AddScriptToExecuteOnDocumentCreated(&hstr(PAGE_SCRIPT), None);
+        if st.o.custom_title_bar {
+            let _ = core.AddScriptToExecuteOnDocumentCreated(&hstr(&title_bar_script(&st.o, non_client)), None);
+        }
 
         resize(hwnd, &controller);
         focus(hwnd, &controller);
@@ -479,6 +512,63 @@ fn external(uri: &str) -> bool {
     u.starts_with("https://") || u.starts_with("http://") || u.starts_with("mailto:")
 }
 
+/// Handles a WINDOW_COMMAND_PREFIX message of the page.
+fn window_command(hwnd: HWND, cmd: &str) {
+    let Some(st) = state(hwnd) else { return };
+    unsafe {
+        match cmd {
+            "minimize" => {
+                let _ = ShowWindow(hwnd, SW_MINIMIZE);
+            }
+            "maximize" if !st.o.fixed_size => {
+                let _ = ShowWindow(hwnd, if IsZoomed(hwnd).as_bool() { SW_RESTORE } else { SW_MAXIMIZE });
+            }
+            "close" => {
+                let _ = PostMessageW(Some(hwnd), WM_CLOSE, WPARAM(0), LPARAM(0));
+            }
+            "drag" => {
+                let mut pt = POINT::default();
+                let _ = GetCursorPos(&mut pt);
+                let _ = ReleaseCapture();
+                let pos = ((pt.y as u16 as u32) << 16) | pt.x as u16 as u32;
+                let _ = PostMessageW(Some(hwnd), WM_NCLBUTTONDOWN, WPARAM(HTCAPTION as usize), LPARAM(pos as i32 as isize));
+            }
+            "state" => sync_title_bar(hwnd, &st),
+            _ => {}
+        }
+    }
+}
+
+/// Tells the custom title bar whether the window is maximized and active.
+fn sync_title_bar(hwnd: HWND, st: &WinState) {
+    if !st.o.custom_title_bar {
+        return;
+    }
+    let Some(core) = st.core.borrow().clone() else { return };
+    let maximized = unsafe { IsZoomed(hwnd).as_bool() };
+    let js = format!("window.__xljsTitleBarState && window.__xljsTitleBarState({maximized}, {})", st.active.get());
+    unsafe {
+        let _ = core.ExecuteScript(&hstr(&js), None);
+    }
+}
+
+/// The client area of a window with a custom title bar: the whole window
+/// but the side and bottom borders (which stay for resizing), and while
+/// maximized the part that is off the screen.
+unsafe fn nc_calc_size(hwnd: HWND, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
+    unsafe {
+        let p = lparam.0 as *mut NCCALCSIZE_PARAMS;
+        let before = (*p).rgrc[0];
+        let r = DefWindowProcW(hwnd, WM_NCCALCSIZE, wparam, lparam);
+        if r.0 != 0 {
+            return r;
+        }
+        let border = before.bottom - (*p).rgrc[0].bottom;
+        (*p).rgrc[0].top = before.top + if IsZoomed(hwnd).as_bool() { border.max(0) } else { 0 };
+        LRESULT(0)
+    }
+}
+
 fn resize(hwnd: HWND, c: &ICoreWebView2Controller) {
     unsafe {
         let mut r = RECT::default();
@@ -499,11 +589,13 @@ unsafe extern "system" fn wnd_proc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam:
     if let Some(st) = state(hwnd) {
         let controller = st.controller.borrow().clone();
         match msg {
+            WM_NCCALCSIZE if st.o.custom_title_bar && wparam.0 != 0 => return unsafe { nc_calc_size(hwnd, wparam, lparam) },
             WM_SIZE => {
                 if let Some(c) = &controller
                     && wparam.0 as u32 != SIZE_MINIMIZED
                 {
                     resize(hwnd, c);
+                    sync_title_bar(hwnd, &st);
                 }
             }
             WM_MOVE => {
@@ -514,6 +606,8 @@ unsafe extern "system" fn wnd_proc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam:
                 }
             }
             WM_ACTIVATE => {
+                st.active.set(wparam.0 & 0xFFFF != 0);
+                sync_title_bar(hwnd, &st);
                 if let Some(c) = &controller
                     && wparam.0 & 0xFFFF != 0
                     && (wparam.0 >> 16) & 0xFFFF == 0
