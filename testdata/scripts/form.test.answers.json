@@ -1,0 +1,25 @@
+{
+  "form": [
+    {"src": "missing", "mode": "商品別", "count": "50", "day": "2026-02-30", "month": "2026-4", "code": "abc", "inputs": "data/a.xlsx;data/none.xlsx"},
+    {"src": "data", "count": 5, "day": "2026-04-01", "month": "2026-04", "code": "ABC", "inputs": ["data/a.xlsx", "data/b.xlsx"], "secret": "pw"},
+    {"tax": true},
+    {},
+    null,
+    {},
+    {},
+    {},
+    {"$button": 0},
+    {"$button": "確認"},
+    {"$button": 2, "memo": "x", "n": ""},
+    {"$button": 2, "n": 8},
+    {},
+    null,
+    {"from": ""},
+    {"from": "2026-04-05", "to": "2026-04-01"},
+    {"to": "2026-04-09"},
+    {"sales": "data/売上_04.csv"},
+    {"sales": "data/none.csv", "purchase": "data/b.xlsx"},
+    {"sales": ""}
+  ],
+  "progress": [{}, {"cancelAfter": 1}]
+}

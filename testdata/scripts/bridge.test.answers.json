@@ -1,0 +1,19 @@
+{
+  "app": [[
+    { "invoke": "add", "args": [1, 2], "expect": 3 },
+    { "invoke": "info", "args": [{ "$date": "2026-04-01T03:00:00.000Z" }, { "$file": "data/a.xlsx" }, { "$dir": "data" }, { "$bytes": "AQID" }],
+      "expect": { "year": 2026, "file": "a.xlsx", "dir": "directory", "size": 3 } },
+    { "invoke": "fail" },
+    { "invoke": "missing" },
+    { "invoke": "notCallable" },
+    { "invoke": "dynamic", "args": [21], "expect": 42 },
+    { "invoke": "whoami", "expect": true },
+    { "emit": "hello", "args": ["画面"] },
+    { "emit": "boom" },
+    { "state": { "month": "2026-04" } },
+    { "handle": "render", "result": 2 },
+    { "event": "click", "selector": "#run" },
+    { "wait": 300 },
+    { "close": true }
+  ]]
+}

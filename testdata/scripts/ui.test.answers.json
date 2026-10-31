@@ -1,0 +1,8 @@
+{
+  "showOpenFilePicker": [["in/a.xlsx", "in/b.csv"], ["in/a.xlsx", "in/b.csv"]],
+  "showDirectoryPicker": ["in"],
+  "showSaveFilePicker": ["result.xlsx"],
+  "confirm": [true, false],
+  "prompt": ["太郎", null],
+  "progress": [{}, {"cancelAfter": 2}, {}, {}]
+}

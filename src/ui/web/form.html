@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>form</title>
+<link rel="stylesheet" href="fontawesome/css/all.min.css">
+<link rel="stylesheet" href="base.css">
+<link rel="stylesheet" href="form.css">
+</head>
+<body>
+<main id="main">
+  <h1 id="heading" hidden></h1>
+  <p id="description" hidden></p>
+  <form id="form" novalidate autocomplete="off">
+    <div id="fields" class="fields"></div>
+    <div id="tabs" role="tablist" hidden></div>
+    <div id="panels"></div>
+    <p id="form-error" class="error-text" hidden></p>
+    <button type="submit" hidden tabindex="-1"></button>
+  </form>
+  <section id="run" hidden>
+    <div class="run-head">
+      <span id="run-message"></span>
+      <span id="run-count"></span>
+    </div>
+    <progress id="run-progress"></progress>
+    <pre id="log" hidden></pre>
+  </section>
+</main>
+<footer>
+  <span id="status" class="status"></span>
+  <button type="button" id="open" hidden></button>
+  <button type="button" id="submit" class="primary"></button>
+  <button type="button" id="cancel"></button>
+</footer>
+<script src="bridge.js"></script>
+<script src="form.js"></script>
+</body>
+</html>

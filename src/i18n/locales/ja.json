@@ -1,0 +1,501 @@
+{
+  "$comment": "日本語のメッセージ。キーは en.json と同じ。translations はエンジン・Excel ライブラリ等の英語メッセージを訳す正規表現（Rust の regex 構文、置換は $1 形式）。",
+  "lang": "ja",
+  "name": "日本語",
+  "match": [
+    "ja"
+  ],
+  "excel": {
+    "font": "游ゴシック"
+  },
+  "messages": {
+    "cli.usage": "xljs - Excel/CSV スクリプトランナー\n\n使い方:\n  xljs [オプション] <script.js|script.ts> [引数...]\n  xljs pack <script> [-o 出力.exe]   スクリプトを埋め込んだ exe を作成\n  xljs check <script>                構文と import を検査（実行しない）\n  xljs init [フォルダ]               型定義 (xljs.d.ts) と jsconfig.json を作成\n  xljs vba <book.xlsm>... [-o 出力.txt]  マクロブックの VBA コードを 1 つのテキストにまとめる\n  xljs version                       バージョンを表示\n\nオプション:\n  --ui=auto|native|console|mock      UI の種類（既定: auto）\n  --ui-answers=<file.json>           mock UI の応答ファイル\n  --lang=auto|{0}                  メッセージの言語（既定: システムの言語）\n  --debug[=script|window]            デバッグ。script = デバッグウィンドウでスクリプトを実行\n                                     （WebView2 の開発者ツールでブレークポイント・ステップ実行）\n                                     window = 画面の開発者ツール（F12）だけを有効にする\n\n環境変数 XLJS_UI / XLJS_UI_ANSWERS / XLJS_LANG / XLJS_DEBUG でも指定できます（埋め込み exe 向け）。\n",
+    "cli.usageCheck": "使い方: xljs check <script>",
+    "cli.usagePack": "使い方: xljs pack <script> [-o 出力.exe]",
+    "cli.interrupted": "中断しました",
+    "cli.cancelRequested": "キャンセルを要求しました（もう一度 Ctrl+C で強制終了）",
+    "cli.selectScript": "実行するスクリプトを選択",
+    "cli.scripts": "スクリプト",
+    "cli.unknownUI": "--ui の値 \"{0}\" は使えません（auto, native, console, mock）",
+    "cli.unknownDebug": "--debug の値 \"{0}\" は使えません（script, window, off）",
+    "cli.debugNeedsWindows": "--debug にはネイティブ UI と WebView2 が必要です。代わりに --debug=window として通常どおり実行します",
+    "cli.unknownLang": "--lang の値 \"{0}\" は使えません（使える言語: {1}）",
+    "cli.checkOK": "問題ありません",
+    "cli.created": "作成しました: {0}",
+    "cli.pressEnterToClose": "Enter キーで閉じます...",
+    "cli.syntaxError": "構文エラー:",
+    "cli.error": "エラー: {0}",
+    "engine.callbackNotFunction": "コールバックには関数を指定してください",
+    "engine.emptyBundle": "バンドル結果が空です",
+    "engine.internalError": "内部エラー: {0}",
+    "engine.bundleNotFunction": "内部エラー: バンドル結果が関数ではありません",
+    "engine.notFinished": "スクリプトが完了しませんでした（解決されない Promise を await しています）",
+    "engine.unhandledRejection": "処理されなかった Promise の reject: {0}",
+    "debug.windowTitle": "デバッグ - {0}",
+    "debug.hint": "開発者ツールで Ctrl+P からスクリプトのファイルを開いてブレークポイントを設定し、［実行］を押してください。開発者ツールは F12 でも開けます。",
+    "debug.breakFirst": "実行の直前で一時停止する",
+    "debug.run": "実行 (F5)",
+    "debug.ready": "実行できます",
+    "debug.running": "実行中…",
+    "debug.finished": "終了しました（終了コード {0}）",
+    "debug.failed": "エラーで終了しました（終了コード {0}）",
+    "debug.close": "閉じる",
+    "debug.aborted": "デバッグウィンドウが閉じられたため、スクリプトを中止しました",
+    "debug.reloaded": "デバッグウィンドウが再読み込みされました。閉じてから xljs --debug をやり直してください",
+    "ui.copy": "コピー",
+    "ui.copied": "コピーしました",
+    "ui.cancel": "キャンセル",
+    "ui.nativeUnavailable": "ネイティブ UI は Windows でのみ使えます",
+    "ui.pressEnter": "(Enter で続行) ",
+    "ui.fileToOpen": "開くファイルのパス",
+    "ui.multipleHint": "、複数は ; 区切り",
+    "ui.saveAs": "保存先のパス",
+    "ui.folder": "フォルダのパス",
+    "ui.allFiles": "すべてのファイル",
+    "ui.expectedIterable": "withProgress: 配列などの反復可能なオブジェクトを指定してください",
+    "shell.noFiles": "表示するファイルが指定されていません",
+    "shell.cannotOpenFolder": "{0}: フォルダを開けません",
+    "shell.cannotOpen": "{0}: 開けません ({1})",
+    "shell.expectedURL": "URL を指定してください: {0}",
+    "fs.copyDirectory": "{0}: フォルダはコピーできません",
+    "fs.notDirectory": "{0}: フォルダではありません",
+    "fs.notFound": "見つかりません: {0}",
+    "fs.typeMismatch": "ファイル／フォルダの種類が違います: {0}",
+    "fs.expectedPath": "{0} にはパス文字列またはハンドルを指定してください",
+    "fs.streamClosed": "ストリームは閉じられています",
+    "fs.invalidName": "不正な名前です: {0}",
+    "data.expectedBytes": "ArrayBuffer・型付き配列・文字列のいずれかを指定してください",
+    "data.unsupportedEncoding": "未対応の文字コードです: \"{0}\"",
+    "data.structuredClone": "structuredClone: 複製できない値です",
+    "data.btoa": "btoa: Latin1 の範囲外の文字が含まれています",
+    "json.parseError": "JSON の解析に失敗しました ({0}): {1}",
+    "cli.usageVBA": "使い方: xljs vba <book.xlsm>... [-o 出力.txt]  （-o - で標準出力）",
+    "cli.vbaNone": "{0}: マクロ（VBA）が含まれていません",
+    "cli.vbaSaveTitle": "VBA コードの保存先",
+    "cli.vbaText": "テキスト",
+    "cli.vbaSaved": "VBA コード（モジュール {0} 個）を保存しました:\n{1}\n\n今すぐ開きますか？",
+    "cli.macroBooks": "マクロ付きブック",
+    "cli.launchMessage": "何をしますか？",
+    "cli.launchRun": "スクリプトを実行",
+    "cli.launchRunNote": "JavaScript / TypeScript のスクリプトを選んで実行します。",
+    "cli.launchDebug": "スクリプトをデバッグ",
+    "cli.launchDebugNote": "デバッグウィンドウでスクリプトを実行し、開発者ツールでブレークポイントやステップ実行を使います。",
+    "cli.launchPack": "exe を作成",
+    "cli.launchPackNote": "スクリプトを埋め込んだ exe を作ります。ダブルクリックで実行でき、xljs のない PC にも配れます。",
+    "cli.launchVBA": "VBA コードを取り出す",
+    "cli.launchVBANote": "マクロ付きブック（.xlsm など）の VBA コードをテキストファイルに書き出します。",
+    "cli.selectScriptToPack": "exe に埋め込むスクリプトを選択",
+    "cli.selectMacroBooks": "VBA コードを取り出すブックを選択",
+    "cli.packSaveTitle": "exe の保存先",
+    "cli.programs": "プログラム",
+    "cli.packed": "作成しました:\n{0}\n\nフォルダを開きますか？",
+    "vba.unsupported": "マクロを含められる Excel ブック（.xlsm / .xlsb / .xlam / .xltm）ではありません",
+    "vba.encrypted": "読み取りパスワードで保護されたブックです。先に Excel でパスワードなしで保存してください",
+    "vba.corrupt": "VBA プロジェクトが壊れているか、読めない形式です（{0}）",
+    "vba.moduleMissing": "モジュール {0} のコードがありません",
+    "vba.textTitle": "# {0} の VBA コード",
+    "vba.textIntro": "Excel ブック「{1}」の VBA プロジェクト「{0}」のコードです（モジュール {2} 個）。各モジュール先頭の Attribute 行は省略しています。",
+    "vba.textModule": "## {0}（{1}）",
+    "vba.textEmpty": "コードのないモジュール: {0}",
+    "vba.separator": "、",
+    "vba.type.standard": "標準モジュール",
+    "vba.type.class": "クラスモジュール",
+    "vba.type.form": "ユーザーフォーム。コントロールの配置は含みません",
+    "vba.type.workbook": "ブックのモジュール",
+    "vba.type.sheet": "シート「{0}」のモジュール",
+    "vba.type.document": "シートのモジュール",
+    "xlsx.invalidHandle": "ブックではありません",
+    "xlsx.closed": "ブックは閉じられています",
+    "xlsx.sheetExists": "シート \"{0}\" は既に存在します",
+    "xlsx.noDestination": "保存先が指定されていません",
+    "xlsx.invalidColor": "色の指定 \"{0}\" が不正です（\"#RRGGBB\" の形式で指定してください）",
+    "xlsx.invalidBorder": "罫線の種類 \"{0}\" が不正です",
+    "xlsx.invalidRange": "セル範囲 \"{0}\" が不正です",
+    "xlsx.invalidOption": "{0} の指定 \"{1}\" が不正です",
+    "os.error": "{0}: {1}: {2}",
+    "os.op.open": "開けません",
+    "os.op.read": "読み込めません",
+    "os.op.write": "書き込めません",
+    "os.op.close": "閉じられません",
+    "os.op.remove": "削除できません",
+    "os.op.mkdir": "フォルダを作成できません",
+    "os.op.stat": "アクセスできません",
+    "os.op.readdir": "フォルダを読み込めません",
+    "os.op.chdir": "フォルダに移動できません",
+    "os.op.chtimes": "日時を設定できません",
+    "os.op.rename": "名前を変更・移動できません",
+    "os.op.symlink": "リンクを作成できません",
+    "os.reason.notExist": "ファイルまたはフォルダが見つかりません",
+    "os.reason.permission": "アクセスが拒否されました（読み取り専用、権限、または他のプログラムが使用中）",
+    "os.reason.exist": "既に存在します",
+    "os.reason.inUse": "他のプログラム（Excel など）で開かれています。閉じてから再実行してください",
+    "os.reason.notDir": "フォルダではありません",
+    "os.reason.isDir": "フォルダです",
+    "os.reason.notEmpty": "フォルダが空ではありません",
+    "os.reason.noSpace": "ディスクの空き容量が足りません",
+    "meta.badMode": "{0}: @mode の値 \"{1}\" は使えません（console, app）",
+    "meta.badSize": "{0}: @size の値 \"{1}\" は 幅x高さ（例: 960x640）で指定してください",
+    "meta.badPath": "{0}: \"{1}\" はスクリプトのフォルダ内の相対パスで指定してください",
+    "meta.badIcon": "{0}: @icon の \"{1}\" は .ico か .png のファイルを指定してください",
+    "meta.unknownKey": "{0}: 警告: 不明なメタデータ {1} は無視します",
+    "meta.unterminated": "{0}: メタデータの終わり（// ==/xljs==）がありません",
+    "pack.sameAsSelf": "出力先が実行中の exe と同じです: {0}",
+    "cli.unknownMetaLang": "警告: @lang の値 \"{0}\" は使えません（使える言語: {1}）",
+    "ui.windowUnavailable": "画面（HTML ウィンドウ）は Windows のネイティブ UI でのみ表示できます（--ui=native）",
+    "ui.webview2Missing": "画面の表示に必要な Microsoft Edge WebView2 ランタイムがインストールされていません。\n次のページからダウンロードしてインストールしてください:\n{0}",
+    "ui.webviewError": "WebView2 のエラー: {0}",
+    "app.badHTML": "HTML のパス \"{0}\" はスクリプトのフォルダからの相対パスで指定してください",
+    "app.htmlNotFound": "HTML ファイル \"{0}\" が見つかりません（@html のファイルか、@assets のフォルダ内に置いてください）",
+    "app.iconNotFound": "アイコンのファイル \"{0}\" が見つかりません（@icon）",
+    "app.badIcon": "\"{0}\" はアイコンとして読み込めません（@icon には .ico ファイルか PNG 画像を指定してください）",
+    "app.noHandler": "画面から呼ばれた関数 \"{0}\" がありません（エントリファイルで export するか app.handle で登録してください）",
+    "app.noPageHandler": "画面に関数 \"{0}\" がありません（xljs.handle で登録するかグローバル関数として定義してください）",
+    "app.handleExported": "\"{0}\" はエントリファイルで export されています",
+    "app.windowClosed": "ウィンドウは閉じられています",
+    "app.pageReloaded": "応答の前に画面が再読み込みされました",
+    "ui.choose": "番号",
+    "ui.badChoice": "1 から {0} までの番号を入力してください",
+    "ui.formButton": "実行する操作",
+    "ui.tableEdit": "編集する行の番号（Enter で次へ）",
+    "ui.tableSelect": "行番号（例: 1,3-5、空欄でキャンセル）",
+    "form.expectedOptions": "ui.form: オプションのオブジェクトを指定してください",
+    "form.fieldName": "ui.form: {0} 番目の項目に name がありません",
+    "form.fieldType": "ui.form: 項目 \"{0}\" の type \"{1}\" は使えません",
+    "form.noOptions": "ui.form: 項目 \"{0}\" には options を指定してください",
+    "form.duplicateName": "ui.form: 項目名 \"{0}\" が重複しています",
+    "form.required": "入力してください",
+    "form.notNumber": "数値を入力してください",
+    "form.min": "{0} 以上の値を入力してください",
+    "form.max": "{0} 以下の値を入力してください",
+    "form.notDate": "日付（YYYY-MM-DD）を入力してください",
+    "form.notMonth": "年月（YYYY-MM）を入力してください",
+    "form.notTime": "時刻（HH:MM）を入力してください",
+    "form.badOption": "選択肢から選んでください",
+    "form.pattern": "形式が正しくありません",
+    "form.fileNotFound": "ファイルが見つかりません: {0}",
+    "form.folderNotFound": "フォルダが見つかりません: {0}",
+    "form.ok": "OK",
+    "form.cancel": "キャンセル",
+    "form.close": "閉じる",
+    "form.browse": "参照…",
+    "form.clear": "クリア",
+    "form.dropHere": "ここにファイルをドロップできます",
+    "form.dropFolder": "ここにフォルダをドロップできます",
+    "form.selectRow": "行を選択してください",
+    "form.noTable": "フォームに表の項目 \"{0}\" がありません",
+    "form.badTab": "{0} 番目のタブは { label, fields } の形で指定してください",
+    "form.badButton": "ui.form: {0} 番目のボタンに onClick を指定してください",
+    "form.noButton": "ui.form: ボタン \"{0}\" がありません",
+    "form.noField": "フォームに項目 \"{0}\" がありません",
+    "form.cellType": "ui.form: 列 \"{0}\" の type \"{1}\" は編集に使えません（text, number, date, month, time, select, checkbox）",
+    "form.tableErrors": "表に {0} 件のエラーがあります",
+    "form.cellError": "{0} 行目 {1}: {2}",
+    "form.rowError": "{0} 行目: {1}",
+    "form.moreErrors": "ほか {0} 件",
+    "ui.tableKeep": "行の番号（例 1,3-5。Enter で {0} のまま、- で選択なし）",
+    "ui.tablePick": "行の番号（例 1,3-5。Enter で選択なし）",
+    "form.abort": "中止",
+    "form.aborting": "中止しています…",
+    "form.running": "実行中…",
+    "form.done": "完了しました",
+    "form.aborted": "中止しました",
+    "form.failed": "エラーが発生しました",
+    "form.openFolder": "フォルダを開く",
+    "table.value": "値",
+    "table.badSelectable": "ui.table: selectable には \"single\" か \"multiple\" を指定してください（\"{0}\" が指定されました）",
+    "table.filter": "絞り込み",
+    "table.count": "{0} 件",
+    "table.countFiltered": "{0} / {1} 件",
+    "table.loading": "読み込み中… {0} / {1} 件",
+    "table.selected": "{0} 件選択",
+    "table.copy": "コピー",
+    "table.copied": "{0} 件をコピーしました",
+    "table.saveCsv": "CSV に保存",
+    "table.saveXlsx": "Excel に保存",
+    "table.saved": "保存しました: {0}",
+    "table.empty": "表示する行がありません",
+    "table.badHandler": "ui.table: {0} には関数を指定してください"
+  },
+  "translations": [
+    [
+      "[Cc]annot read property '([^']*)' of (undefined|null)",
+      "$2 のプロパティ '$1' は読み取れません"
+    ],
+    [
+      "[Cc]annot set property '([^']*)' of (undefined|null)",
+      "$2 にプロパティ '$1' は設定できません"
+    ],
+    [
+      "TypeError: not a function",
+      "TypeError: 関数ではない値を呼び出しました（関数名・プロパティ名を確認してください）"
+    ],
+    [
+      "TypeError: not a constructor",
+      "TypeError: コンストラクタではない値に new を使いました"
+    ],
+    [
+      "TypeError: property is not a function",
+      "TypeError: プロパティが関数ではありません"
+    ],
+    [
+      "value is not iterable",
+      "値は反復可能ではありません（for...of やスプレッドには配列などが必要です）"
+    ],
+    [
+      "'([^']*)' is read-only",
+      "const で宣言した変数 '$1' には再代入できません"
+    ],
+    [
+      "([\\w$]+) is not initialized",
+      "初期化前の '$1' にはアクセスできません"
+    ],
+    [
+      "invalid array length",
+      "配列の長さが不正です"
+    ],
+    [
+      "cannot convert to object",
+      "undefined / null はオブジェクトに変換できません"
+    ],
+    [
+      "cannot convert symbol to (string|number)",
+      "Symbol は変換できません"
+    ],
+    [
+      "cannot convert BigInt to number",
+      "BigInt と他の型は混ぜて計算できません"
+    ],
+    [
+      "Unexpected end of JSON input",
+      "JSON が途中で終わっています"
+    ],
+    [
+      "(?:Expected [^\\n]*|Unexpected (?:token|character|non-whitespace character)[^\\n]*) in JSON at position (\\d+)[^\\n]*",
+      "JSON の解析に失敗しました（位置 $1）"
+    ],
+    [
+      "interrupted",
+      "中断しました"
+    ],
+    [
+      "Expected `([^`]*)` but found `EOF`",
+      "\"$1\" が必要ですが、ファイルが終わっています（括弧の閉じ忘れなど）"
+    ],
+    [
+      "Expected `([^`]*)` but found `([^`]*)`",
+      "\"$1\" が必要ですが \"$2\" があります"
+    ],
+    [
+      "^Unexpected token$",
+      "予期しない記号があります"
+    ],
+    [
+      "(?m): Unexpected token$",
+      ": 予期しない記号があります"
+    ],
+    [
+      "Unterminated string",
+      "文字列が閉じられていません"
+    ],
+    [
+      "Unterminated regular expression",
+      "正規表現が閉じられていません"
+    ],
+    [
+      "Unterminated template",
+      "テンプレート文字列が閉じられていません"
+    ],
+    [
+      "Expected a semicolon or an implicit semicolon after a statement, but found none[^\\n]*",
+      "文の区切りが必要です（; の付け忘れ、または余分な語があります）"
+    ],
+    [
+      "A 'return' statement can only be used within a function body\\.?",
+      "トップレベルでは return を使えません（exit() を使ってください）"
+    ],
+    [
+      "`await` is only allowed within async functions[^\\n]*",
+      "async 関数の外では \"await\" を使えません"
+    ],
+    [
+      "Identifier `([^`]*)` has already been declared",
+      "\"$1\" は既に宣言されています"
+    ],
+    [
+      "Invalid Unicode escape sequence",
+      "Unicode エスケープが不正です"
+    ],
+    [
+      "Cannot read property '([^']*)' of (undefined|null)",
+      "$2 のプロパティ '$1' は読み取れません"
+    ],
+    [
+      "Cannot set property '([^']*)' of (undefined|null)",
+      "$2 にプロパティ '$1' は設定できません"
+    ],
+    [
+      "Object has no member '([^']*)'",
+      "オブジェクトにメンバー '$1' はありません（関数名・プロパティ名を確認してください）"
+    ],
+    [
+      "([\\w$.\\[\\]'\\\"]+) is not a function",
+      "$1 は関数ではありません"
+    ],
+    [
+      "([\\w$.\\[\\]'\\\"]+) is not a constructor",
+      "$1 はコンストラクタではありません"
+    ],
+    [
+      "([\\w$.\\[\\]'\\\"]+) is not iterable",
+      "$1 は反復可能ではありません"
+    ],
+    [
+      "([\\w$]+) is not defined",
+      "$1 は定義されていません"
+    ],
+    [
+      "Assignment to constant variable\\.?",
+      "const で宣言した変数には再代入できません"
+    ],
+    [
+      "Cannot access '([^']*)' before initialization",
+      "初期化前の '$1' にはアクセスできません"
+    ],
+    [
+      "Maximum call stack size exceeded",
+      "呼び出しが深すぎます（無限再帰の可能性があります）"
+    ],
+    [
+      "Invalid array length",
+      "配列の長さが不正です"
+    ],
+    [
+      "Cannot convert undefined or null to object",
+      "undefined / null はオブジェクトに変換できません"
+    ],
+    [
+      "Cannot convert a Symbol value to a string",
+      "Symbol は文字列に変換できません"
+    ],
+    [
+      "Cannot mix BigInt and other types.*",
+      "BigInt と他の型は混ぜて計算できません"
+    ],
+    [
+      "invalid character '([^']*)' looking for beginning of value",
+      "JSON の解析に失敗しました（予期しない文字 '$1'）"
+    ],
+    [
+      "invalid character '([^']*)' after (object key|object key:value pair|array element)",
+      "JSON の解析に失敗しました（予期しない文字 '$1'）"
+    ],
+    [
+      "(?i)unexpected end of JSON input( \\(EOF\\))?",
+      "JSON が途中で終わっています"
+    ],
+    [
+      "invalid character '([^']*)' (looking for beginning of object key string|in string literal|in literal \\w+ \\(expecting '[^']*'\\))",
+      "予期しない文字 '$1'"
+    ],
+    [
+      "(?m)invalid character '([^']*)'$",
+      "予期しない文字 '$1'"
+    ],
+    [
+      "Could not resolve \"([^\"]*)\"",
+      "\"$1\" が見つかりません（import のパスを確認してください）"
+    ],
+    [
+      "Expected \"([^\"]*)\" but found end of file",
+      "\"$1\" が必要ですが、ファイルが終わっています（括弧の閉じ忘れなど）"
+    ],
+    [
+      "Expected \"([^\"]*)\" but found \"([^\"]*)\"",
+      "\"$1\" が必要ですが \"$2\" があります"
+    ],
+    [
+      "Expected identifier but found \"([^\"]*)\"",
+      "識別子が必要ですが \"$1\" があります"
+    ],
+    [
+      "Expected (.+?) but found \"([^\"]*)\"",
+      "$1 が必要ですが \"$2\" があります"
+    ],
+    [
+      "Unexpected end of file",
+      "ファイルが途中で終わっています（括弧の閉じ忘れなど）"
+    ],
+    [
+      "Unexpected \"([^\"]*)\"",
+      "予期しない \"$1\" があります"
+    ],
+    [
+      "Unterminated string literal",
+      "文字列が閉じられていません"
+    ],
+    [
+      "Unterminated template literal",
+      "テンプレート文字列が閉じられていません"
+    ],
+    [
+      "Unterminated regular expression",
+      "正規表現が閉じられていません"
+    ],
+    [
+      "The symbol \"([^\"]*)\" has already been declared",
+      "\"$1\" は既に宣言されています"
+    ],
+    [
+      "Top-level return cannot be used.*",
+      "トップレベルでは return を使えません（exit() を使ってください）"
+    ],
+    [
+      "Cannot use \"await\" outside.*",
+      "async 関数の外では \"await\" を使えません"
+    ],
+    [
+      "zip: not a valid zip file",
+      "xlsx として読み込めません（形式が違うか、ファイルが壊れています）"
+    ],
+    [
+      "sheet (.+?) does not exist",
+      "シート \"$1\" はありません"
+    ],
+    [
+      "cannot convert cell \"([^\"]*)\" to coordinates: invalid cell name \"[^\"]*\"",
+      "セル番地 \"$1\" が不正です"
+    ],
+    [
+      "invalid cell name \"([^\"]*)\"",
+      "セル番地 \"$1\" が不正です"
+    ],
+    [
+      "invalid column name \"([^\"]*)\"",
+      "列名 \"$1\" が不正です"
+    ],
+    [
+      "the sheet name length exceeds the (\\d+) characters limit",
+      "シート名は $1 文字までです"
+    ],
+    [
+      "the sheet can not contain any of the characters.*",
+      "シート名に使えない文字（: \\ / ? * [ ]）が含まれています"
+    ],
+    [
+      "the sheet name can not be blank",
+      "シート名を空にはできません"
+    ],
+    [
+      "the encrypted file is not supported.*|unsupported encryption mechanism",
+      "パスワード付きのファイルには対応していません"
+    ],
+    [
+      "invalid font size",
+      "フォントサイズが不正です"
+    ],
+    [
+      "exceeds maximum font length",
+      "フォント名が長すぎます"
+    ]
+  ]
+}

@@ -1,0 +1,68 @@
+:root { --row-h: 26px; --head-h: 32px; }
+.toolbar {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 8px 12px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+}
+#filter { width: 280px; flex: 0 1 280px; min-width: 120px; }
+#count { color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; font-variant-numeric: tabular-nums; }
+.toolbar button { flex: none; white-space: nowrap; }
+.spacer { flex: 1; }
+#grid {
+  flex: 1;
+  overflow: auto;
+  position: relative;
+  background: var(--panel);
+  outline: none;
+  font-variant-numeric: tabular-nums;
+}
+.trow {
+  display: grid;
+  grid-template-columns: var(--cols);
+  height: var(--row-h);
+  width: max-content;
+  min-width: 100%;
+}
+#head {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+}
+#head.trow { height: var(--head-h); }
+#head .cell { line-height: var(--head-h); font-size: inherit; font-weight: normal; }
+#body { position: relative; }
+#rows { position: absolute; top: 0; left: 0; min-width: 100%; }
+.cell {
+  padding: 0 8px;
+  line-height: var(--row-h);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  border-right: 1px solid var(--border);
+  -webkit-user-select: none;
+  user-select: none;
+}
+.trow .cell:last-child { border-right: none; }
+.num { text-align: right; }
+.gutter { color: var(--muted); text-align: right; font-weight: normal; background: var(--bg); }
+#head .cell { position: relative; padding-right: 18px; }
+#head .cell:not(.gutter):hover { background: var(--hover); }
+#head .sort { position: absolute; right: 8px; font-size: 10px; color: var(--muted); }
+#head .grip { position: absolute; top: 0; right: -4px; width: 8px; height: 100%; cursor: col-resize; z-index: 2; }
+#rows .trow:nth-child(even) { background: var(--alt); }
+#rows .trow:hover { background: var(--hover); }
+#rows .trow.sel { background: var(--sel); color: var(--sel-fg); }
+#rows .trow.sel .gutter { background: transparent; color: inherit; }
+#grid:focus-visible #rows .trow.cur { outline: 1px dotted var(--fg); outline-offset: -2px; }
+#rows .trow.cur.sel { outline: none; }
+#grid:focus #rows .trow.cur { box-shadow: inset 2px 0 0 var(--accent); }
+.null { color: var(--muted); }
+#empty { padding: 24px; color: var(--muted); text-align: center; }
+.measure { position: absolute; top: 0; left: 0; visibility: hidden; white-space: nowrap; }
+.measure .cell { display: inline-block; overflow: visible; }
+.measure.head .cell { padding-right: 18px; }

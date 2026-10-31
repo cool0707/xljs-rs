@@ -1,0 +1,103 @@
+name: CI
+
+on:
+  push:
+    branches: [main, "ccr-*"]
+    tags: ["v*"]
+  pull_request:
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: cargo test
+        shell: bash
+        # The native dialog tests share the desktop: one test at a time.
+        run: |
+          if ! cargo test --lib -- --test-threads=1 > test.log 2>&1; then
+            cat test.log
+            # A crash (abort, fast fail) loses the captured output: run again
+            # without capturing to see what the tests printed.
+            if grep -q 'exited abnormally' test.log; then
+              RUST_BACKTRACE=1 cargo test --lib -- --test-threads=1 --nocapture 2>&1 | tail -200 || true
+            fi
+            # Surface the failures as an annotation (readable via the API).
+            msg=$(grep -E -- 'panicked|FAILED|^error|\.js:[0-9]+' test.log | head -40 | sed 's/%/%25/g' | awk '{printf "%s%%0A", $0}')
+            echo "::error title=cargo test failed::${msg}"
+            exit 1
+          fi
+          cat test.log
+      - name: Type-check the examples
+        if: runner.os == 'Linux'
+        # With the d.ts and jsconfig.json that `xljs init` writes, as users get them.
+        run: |
+          ex="$RUNNER_TEMP/examples"
+          cp -r examples "$ex"
+          cargo run -q -- init "$ex"
+          cd "$ex" && npx -y -p typescript@6.0.2 tsc -p jsconfig.json
+
+  build:
+    needs: test
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc, aarch64-pc-windows-msvc
+      - uses: Swatinem/rust-cache@v2
+      - name: Build Windows binaries
+        shell: bash
+        env:
+          XLJS_VERSION: ${{ github.ref_name }}
+        run: |
+          for t in x86_64-pc-windows-msvc aarch64-pc-windows-msvc; do
+            cargo build --release --target $t
+            cargo build --release --target $t --features console --target-dir target/console
+          done
+          mkdir -p dist/x64 dist/arm64 dist/docs
+          cp target/x86_64-pc-windows-msvc/release/xljs.exe dist/x64/xljs.exe
+          cp target/console/x86_64-pc-windows-msvc/release/xljs.exe dist/x64/xljsc.exe
+          cp target/aarch64-pc-windows-msvc/release/xljs.exe dist/arm64/xljs.exe
+          cp target/console/aarch64-pc-windows-msvc/release/xljs.exe dist/arm64/xljsc.exe
+          cp -r docs/ai dist/docs/
+          cd dist
+          for a in x64 arm64; do
+            7z a -tzip xljs-windows-$a.zip ./$a/xljs.exe ./$a/xljsc.exe > /dev/null
+            7z rn xljs-windows-$a.zip $a/xljs.exe xljs.exe $a/xljsc.exe xljsc.exe > /dev/null
+            7z a -tzip xljs-windows-$a.zip docs > /dev/null
+          done
+      - uses: actions/upload-artifact@v4
+        with:
+          name: xljs-windows
+          path: dist/*.zip
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: xljs-windows
+          path: dist
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" dist/*.zip --repo "$GITHUB_REPOSITORY" --generate-notes
