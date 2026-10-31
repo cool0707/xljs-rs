@@ -15,6 +15,7 @@ pub mod remote;
 mod ui;
 mod vba;
 mod xlsx;
+mod xlsx_chart;
 mod xlsx_style;
 
 use std::cell::{Cell, RefCell};

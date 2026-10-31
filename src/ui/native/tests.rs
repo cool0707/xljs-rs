@@ -170,8 +170,8 @@ try {
     assert_eq!(got, ["true 16 woke 42"]);
 }
 
-/// The form and table pages: each says "ready", renders the "init" message
-/// and answers "shown".
+/// The form, table and chart pages: each says "ready", renders the "init"
+/// message and answers "shown".
 #[test]
 fn builtin_pages() {
     let inits = [
@@ -180,6 +180,12 @@ fn builtin_pages() {
             r#"{"type":"init","texts":{"ok":"OK"},"fields":[{"name":"a","label":"A","type":"text","value":"x","options":[],"accept":[]},{"name":"b","label":"B","type":"files","value":[],"options":[],"accept":[".xlsx"]}]}"#,
         ),
         ("table.html", r#"{"type":"init","total":1,"select":"single","texts":{},"columns":[{"label":"A","width":0}]}"#),
+        // AG Charts and Frappe Gantt (the page reports an error with "shown").
+        ("chart.html", r#"{"type":"init","lang":"ja","texts":{},"spec":{"type":"column","data":[{"a":"x","b":1},{"a":"y","b":2}]}}"#),
+        (
+            "chart.html",
+            r#"{"type":"init","lang":"ja","texts":{},"spec":{"type":"gantt","data":[{"name":"x","start":"2026-11-02","end":"2026-11-04"}]}}"#,
+        ),
     ];
     for (page, init) in inits {
         let o = WindowOptions { title: page.into(), url: format!("{ASSET_ORIGIN}{BUILTIN_PREFIX}{page}"), assets: Some(Arc::new(BuiltinOnly)), ..Default::default() };
