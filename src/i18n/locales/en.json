@@ -200,6 +200,7 @@
     "form.nestedGroup": "group \"{0}\" cannot be inside another group",
     "form.badTab": "tab {0} must be an object like { label, fields }",
     "form.badButton": "ui.form: button {0} needs onClick",
+    "form.badAccent": "ui.form: accent must be a CSS color like \"#c42b1c\" or { light, dark } (got \"{0}\")",
     "form.noButton": "ui.form: no button \"{0}\"",
     "form.noField": "the form has no field \"{0}\"",
     "form.cellType": "ui.form: column \"{0}\" cannot be edited as \"{1}\" (text, number, date, month, time, select, checkbox)",
