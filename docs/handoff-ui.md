@@ -104,6 +104,9 @@ IProgressDialog、コピー可能なエラーダイアログ）、エクスプ�
     大量行は想定していない（それは ui.table）。`ctx.table(name, rows, columns?)` → ページへ `{"type":"table"}`（コンソール・mock は `uiTable` で出力）。
     `tabs: [{ label, fields }]` の項目は `tab`（番号、上の共通項目は -1）付きで平らに並べ、init の `tabs` でタブバーとパネルを作る。
     エラーのある項目のタブに印を付けて切り替える。コンソールは `FormField.Tab` が変わるところで見出しを出す。
+    グループ `{ group, icon, help, fields }`（fields・タブの fields に項目と並べる、入れ子不可）も平らにして項目に `group`（番号、なしは -1）を付け、
+    init の `groups: [{ label, icon, help, tab, at }]`（at: 最初の項目の番号）で、その項目の前に見出しと subgrid の `section.group` を作る。
+    コンソールは `FormField.group` が変わるところで `-- 見出し --`（と `groupHelp`）を出す。
   - `@icon`（.ico / .png）: `AssetRoots` に含めて pack で同梱。`appOpen` が最初のウィンドウで読み込み・検査（`ui.CheckIcon`）し、
     すべてのウィンドウ（組み込みのフォーム・表も）の `WindowOptions.Icon` に渡す。Native は `ui.iconImage` で
     SM_CXICON / SM_CXSMICON に合う画像を選んで `CreateIconFromResourceEx` → `WM_SETICON`、WM_DESTROY で `DestroyIcon`。

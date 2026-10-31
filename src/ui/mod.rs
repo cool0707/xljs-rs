@@ -202,6 +202,10 @@ pub struct FormField {
     pub error: String,
     /// The label of the tab the field is on ("" = above the tabs).
     pub tab: String,
+    /// The heading of the group the field is in ("" = not in a group).
+    pub group: String,
+    /// The description shown under the group's heading.
+    pub group_help: String,
     pub columns: Vec<String>,
     pub rows: Vec<Vec<String>>,
     pub select: String,

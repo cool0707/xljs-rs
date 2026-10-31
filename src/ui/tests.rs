@@ -65,7 +65,7 @@ fn console_form_tables_and_tabs() {
     };
     let o = FormOptions {
         fields: vec![
-            FormField { value: json!("x"), ..field("a", "共通", "text") },
+            FormField { value: json!("x"), group: "グループ".into(), group_help: "まとめた項目".into(), ..field("a", "共通", "text") },
             FormField { columns: vec!["名前".into()], rows: vec![vec!["表示だけ".into()]], tab: "基本".into(), ..field("info", "一覧", "table") },
             table("pick", "対象", SELECT_MULTIPLE, json!([]), "基本"),
             table("one", "一つ", SELECT_SINGLE, json!([0.0]), "詳細"),
@@ -75,7 +75,7 @@ fn console_form_tables_and_tabs() {
     };
     let v = c.form(&o).unwrap_or_else(|| panic!("cancelled:\n{}", out.text()));
     assert_eq!(Value::Object(v), json!({"a": "x", "pick": [1, 2], "one": [0], "none": []}));
-    for s in ["== 基本 ==", "== 詳細 ==", "表示だけ", "│ 3 │ C社", "Enter で 1 のまま", "Enter で選択なし", "1 から 3 までの番号"] {
+    for s in ["-- グループ --\nまとめた項目\n", "== 基本 ==", "== 詳細 ==", "表示だけ", "│ 3 │ C社", "Enter で 1 のまま", "Enter で選択なし", "1 から 3 までの番号"] {
         assert!(out.text().contains(s), "output does not contain {s:?}:\n{}", out.text());
     }
 }

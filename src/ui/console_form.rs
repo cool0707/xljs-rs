@@ -18,10 +18,21 @@ pub(crate) fn form(c: &Console, o: &FormOptions) -> Option<Map<String, Value>> {
     }
     let mut values = Map::new();
     let mut tab = String::new();
+    let mut group = String::new();
     for f in &o.fields {
         if f.tab != tab {
             tab = f.tab.clone();
+            group.clear();
             c.w(&format!("== {tab} ==\n"));
+        }
+        if f.group != group {
+            group = f.group.clone();
+            if !group.is_empty() {
+                c.w(&format!("-- {group} --\n"));
+                if !f.group_help.is_empty() {
+                    c.w(&format!("{}\n", f.group_help));
+                }
+            }
         }
         if !f.error.is_empty() {
             c.w(&format!("! {}: {}\n", field_label(f), f.error));

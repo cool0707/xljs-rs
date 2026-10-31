@@ -185,6 +185,8 @@
     "form.dropFolder": "ここにフォルダをドロップできます",
     "form.selectRow": "行を選択してください",
     "form.noTable": "フォームに表の項目 \"{0}\" がありません",
+    "form.badGroup": "グループ「{0}」の fields は配列で指定してください",
+    "form.nestedGroup": "グループ「{0}」はグループの中に入れられません",
     "form.badTab": "{0} 番目のタブは { label, fields } の形で指定してください",
     "form.badButton": "ui.form: {0} 番目のボタンに onClick を指定してください",
     "form.noButton": "ui.form: ボタン \"{0}\" がありません",

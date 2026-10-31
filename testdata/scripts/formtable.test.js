@@ -32,6 +32,21 @@ v = await ui.form({
 });
 deepEqual(v, { common: "共通", a: "入力", b: 1, t: [customers[1]] });
 
+// Groups: their fields are flat with the others (also on a tab).
+v = await ui.form({
+  title: "グループ",
+  fields: [
+    { name: "g0", default: "前" },
+    { group: "入力", icon: "file-import", help: "説明", fields: [{ name: "g1", default: 1, type: "number" }] },
+    { group: "空", fields: [] },
+  ],
+  tabs: [{ label: "詳細", fields: [{ group: "出力", fields: [{ name: "g2", type: "checkbox" }] }] }],
+});
+deepEqual(v, { g0: "前", g1: 1, g2: true });
+await rejects(() => ui.form({ fields: [{ group: "a", fields: [{ group: "b", fields: [] }] }] }), /グループ「b」/);
+await rejects(() => ui.form({ fields: [{ group: "a", fields: 1 }] }), /グループ「a」/);
+await rejects(() => ui.form({ fields: [{ name: "x" }, { group: "a", fields: [{ name: "x" }] }] }), /"x"/, "same name in a group");
+
 await rejects(() => ui.form({ fields: [{ name: "x" }], tabs: [{ fields: [{ name: "x" }] }] }), /"x"/, "same name on a tab");
 await rejects(() => ui.form({ tabs: [1] }), /タブ/);
 await rejects(() => ui.form({ fields: [{ name: "t", type: "table", selectable: "some" }] }), /some/);

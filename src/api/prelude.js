@@ -1569,7 +1569,7 @@
     return words.join(" ");
   }
 
-  function normField(f, i, tab) {
+  function normField(f, i, tab, group) {
     if (!f || typeof f !== "object" || f.name === undefined || f.name === null || f.name === "") {
       throw new TypeError(T("form.fieldName", i + 1));
     }
@@ -1585,7 +1585,7 @@
     const num = (v) => (v === undefined || v === null || v === "" ? null : Number(v));
     const table = type === "table" ? formTable(f, f.rows, f.columns) : null;
     return {
-      name, type, options, accept, table, tab, columns: f.columns,
+      name, type, options, accept, table, tab, group, columns: f.columns,
       tableSpec: { selectable: f.selectable, editable: f.editable, validateRow: f.validateRow },
       label: f.label === undefined ? name : String(f.label),
       icon: faClass(f.icon),
@@ -1842,12 +1842,28 @@
 
   async function showForm(options) {
     if (!options || typeof options !== "object") throw new TypeError(T("form.expectedOptions"));
-    // Fields above the tabs, then each tab's fields (tab: its index, or -1).
-    const fields = Array.from(options.fields || []).map((f, i) => normField(f, i, -1));
+    // Fields above the tabs, then each tab's fields (tab: its index, or -1),
+    // flat; a group ({ group, fields }) gives its fields its index (or -1).
+    const fields = [], groups = [];
+    const addFields = (list, tab) => {
+      for (const f of Array.from(list || [])) {
+        if (f && typeof f === "object" && "group" in f) {
+          if (!Array.isArray(f.fields) && f.fields !== undefined) throw new TypeError(T("form.badGroup", String(f.group)));
+          // at: the index of its first field (where the group starts on the page).
+          const g = groups.length;
+          groups.push({ label: String(f.group ?? ""), icon: faClass(f.icon), help: f.help ? String(f.help) : "", tab, at: fields.length });
+          for (const x of Array.from(f.fields || [])) {
+            if (x && typeof x === "object" && "group" in x) throw new TypeError(T("form.nestedGroup", String(x.group)));
+            fields.push(normField(x, fields.length, tab, g));
+          }
+        } else fields.push(normField(f, fields.length, tab, -1));
+      }
+    };
+    addFields(options.fields, -1);
     const tabIcons = [];
     const tabs = Array.from(options.tabs || []).map((t, k) => {
       if (!t || typeof t !== "object") throw new TypeError(T("form.badTab", k + 1));
-      for (const f of Array.from(t.fields || [])) fields.push(normField(f, fields.length, k));
+      addFields(t.fields, k);
       tabIcons.push(faClass(t.icon));
       return t.label === undefined ? String(k + 1) : String(t.label);
     });
@@ -1875,7 +1891,7 @@
       submit: options.submit ? String(options.submit) : "",
       noSubmit: options.submit === false && buttons.length > 0,
       icon: faClass(options.icon), submitIcon: faClass(options.submitIcon),
-      key, tabs, tabIcons, buttons,
+      key, tabs, tabIcons, groups, buttons,
     };
     return native.supportsWindows ? formWindow(o, fields, wire, options) : formPrompt(o, fields, wire, options);
   }
@@ -1908,6 +1924,7 @@
           name: f.name, label: f.label, type: f.type, options: f.options, required: f.required,
           placeholder: f.placeholder, help: f.help, accept: f.accept, value: wire[f.name], error: errors[f.name] || "",
           tab: f.tab >= 0 ? o.tabs[f.tab] : "",
+          group: f.group >= 0 ? o.groups[f.group].label : "", groupHelp: f.group >= 0 ? o.groups[f.group].help : "",
         }, f.table ? Object.assign({ select: f.table.select }, tableText(f.table)) : {},
         f.table && f.table.edit ? {
           editable: f.table.edit.filter(Boolean).map((cf) => ({ index: cf.col, type: cf.type, options: cf.options })),
@@ -2010,6 +2027,11 @@
       if (f.tab >= 0) heights[f.tab] += fh;
       else common += fh;
     }
+    for (const g of o.groups) {
+      const gh = 40 + (g.help ? 20 : 0); // the heading
+      if (g.tab >= 0) heights[g.tab] += gh;
+      else common += gh;
+    }
     h += common + (o.tabs.length ? 48 + Math.max(...heights) : 0);
     if (hasRun) h += 240;
     return {
@@ -2048,13 +2070,14 @@
             page.send({
               type: "init", title: o.title, icon: o.icon, description: o.description, texts: formTexts(),
               submit: o.submit, submitIcon: o.submitIcon, tabs: o.tabs, tabIcons: o.tabIcons,
+              groups: o.groups,
               noSubmit: o.noSubmit, buttons: o.buttons.map((b) => b.label), buttonIcons: o.buttons.map((b) => b.icon),
               buttonTooltips: o.buttons.map((b) => b.tooltip),
               fields: fields.map((f) => ({
                 name: f.name, label: f.label, icon: f.icon, type: f.type, options: f.options, required: f.required,
                 placeholder: f.placeholder, help: f.help, tooltip: f.tooltip, change: !!f.onChange,
                 accept: f.accept, min: f.min, max: f.max, step: f.step,
-                rows: f.type === "table" ? tableLines(f) : f.rows, value: wire[f.name], tab: f.tab,
+                rows: f.type === "table" ? tableLines(f) : f.rows, value: wire[f.name], tab: f.tab, group: f.group,
                 table: f.table ? Object.assign({ select: f.table.select, editable: editWire(f.table) || undefined }, tableWire(f.table)) : undefined,
               })),
             });

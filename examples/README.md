@@ -6,7 +6,7 @@
 |---|---|---|
 | `dialog-aggregate.js` | ダイアログ・ピッカー | フォルダを選び、Excel ファイルを集計して保存する（`showDirectoryPicker`・`ui.withProgress`・`showSaveFilePicker`・`alert`） |
 | `progress-cancel.js` | 進捗表示 | 進捗ダイアログとキャンセル（`ui.progress`） |
-| `form-aggregate.js` | 入力フォーム（`ui.form`） | HTML なしのフォームで条件を入力し、開いたままのウィンドウで進捗・ログを表示しながら集計する（`onSubmit`・`remember`） |
+| `form-aggregate.js` | 入力フォーム（`ui.form`） | HTML なしのフォームで条件を入力し、開いたままのウィンドウで進捗・ログを表示しながら集計する（見出し付きのグループ・`onSubmit`・`remember`） |
 | `form-tabs-table.js` | 入力フォーム（`ui.form`） | タブで項目を切り替え、表から対象を選び、結果を表に表示する（`tabs`・`type: "table"`・`ctx.table`） |
 | `table-file-list.js` | 表表示（`ui.table`） | ファイル一覧を表で表示し、選んだファイルを処理する（`selectable`・`onDoubleClick`） |
 | `app-hello/` | アプリ（HTML の画面） | 最小のアプリ。フォームの値を export した関数に渡し、結果を表示する（`@mode app`・`data-action`・`data-bind`） |

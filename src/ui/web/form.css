@@ -19,6 +19,18 @@ main { flex: 1; overflow: auto; padding: 16px 20px 8px; }
 .tab:hover:not(:disabled) { background: var(--hover); }
 .tab.active { border-bottom-color: var(--accent); color: var(--accent); }
 .tab.has-error::after { content: " ●"; color: var(--error); }
+/* A group: a heading over its fields, which line up with the fields around it. */
+.group { grid-column: 1 / -1; display: grid; grid-template-columns: subgrid; gap: 10px 14px; align-items: start; margin-top: 6px; }
+.group-head {
+  grid-column: 1 / -1;
+  margin: 0;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--border);
+  font-size: 1.05em;
+  font-weight: 600;
+}
+.group-head .icon { color: var(--accent); }
+.group-help { grid-column: 1 / -1; margin-top: -6px; color: var(--muted); font-size: 12px; white-space: pre-wrap; }
 .lbl.wide, .ctl.wide { grid-column: 1 / -1; }
 .lbl.wide { padding-top: 0; max-width: none; }
 .ftable {
