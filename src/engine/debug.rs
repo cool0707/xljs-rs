@@ -11,3 +11,8 @@ pub const DEBUG_PAGE: &str = "https://app.xljs/_xljs/debug.html";
 pub(super) fn run(_o: &Options, _env: Env, _code: Vec<u8>) -> Result<i32> {
     Err(err!("engine.internalError", "debugger"))
 }
+
+#[cfg(test)]
+pub(crate) mod tests {
+    pub(crate) fn use_fake_page(_o: &mut super::Options) {}
+}

@@ -202,7 +202,10 @@ pub fn run(mut o: Options) -> Result<i32> {
     let code = String::from_utf8_lossy(&code).into_owned();
 
     let rt = rquickjs::Runtime::new().map_err(|e| err!("engine.internalError", e))?;
-    rt.set_max_stack_size(32 << 20);
+    // The script thread of ui::run has a large stack; other threads (tests)
+    // have the default one.
+    let big = std::thread::current().name() == Some("script");
+    rt.set_max_stack_size(if big { 32 << 20 } else { 1 << 20 });
     let ctx = rquickjs::Context::full(&rt).map_err(|e| err!("engine.internalError", e))?;
     let host = Rc::new(Host::new(env, Mapper::from_bundle(&code)));
     {

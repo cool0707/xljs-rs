@@ -216,5 +216,14 @@
     "table.empty": "No rows",
     "table.badHandler": "ui.table: {0} must be a function"
   },
-  "translations": []
+  "translations": [
+    [
+      "\\bcannot read property '",
+      "Cannot read property '"
+    ],
+    [
+      "\\bcannot set property '",
+      "Cannot set property '"
+    ]
+  ]
 }

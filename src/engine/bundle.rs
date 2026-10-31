@@ -190,7 +190,15 @@ impl Bundler {
             }
         }
         let mut program = ret.program;
-        let scoping = SemanticBuilder::new().build(&program).semantic.into_scoping();
+        let sem = SemanticBuilder::new().with_check_syntax_error(true).build(&program);
+        if !sem.diagnostics.is_empty() {
+            for d in sem.diagnostics.iter() {
+                let off = d.labels.first().map(|l| l.offset() as usize);
+                self.error(id, src, off, d.message.to_string());
+            }
+            return;
+        }
+        let scoping = sem.semantic.into_scoping();
         let mut scoping = scoping;
         if ts {
             let opts = TransformOptions::from_target("esnext").unwrap_or_default();
@@ -325,8 +333,8 @@ impl Bundler {
         push(&mut code, RUNTIME, &mut line);
         push(&mut code, &format!("return __xljs_load({}, {EXPORTS_PARAM});\n}})", serde_json::to_string(entry).unwrap()), &mut line);
         let map = ConcatSourceMapBuilder::from_sourcemaps(&maps).into_sourcemap();
-        code.push_str("\n//# sourceMappingURL=");
-        code.push_str(&map.to_data_url());
+        code.push_str("\n//# sourceMappingURL=data:application/json;base64,");
+        code.push_str(&base64::Engine::encode(&base64::engine::general_purpose::STANDARD, map.to_json_string()));
         code.push('\n');
         code
     }
@@ -390,7 +398,7 @@ function __xljs_load(id, onExports) {
       if (k !== "default" && !(k in exports)) Object.defineProperty(exports, k, { enumerable: true, configurable: true, get() { return src[k]; } });
     }
   };
-  return fn(imp, dyn, exports, all, { url: "file:///" + id });
+  return fn(imp, dyn, exports, all, { url: "file:///" + id }).then(() => exports);
 }
 "#;
 

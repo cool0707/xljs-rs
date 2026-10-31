@@ -1,5 +1,5 @@
 {
-  "$comment": "日本語のメッセージ。キーは en.json と同じ。translations はエンジン・Excel ライブラリ等の英語メッセージを訳す正規表現（Go の regexp 構文、置換は $1 形式）。",
+  "$comment": "日本語のメッセージ。キーは en.json と同じ。translations はエンジン・Excel ライブラリ等の英語メッセージを訳す正規表現（Rust の regex 構文、置換は $1 形式）。",
   "lang": "ja",
   "name": "日本語",
   "match": [
@@ -217,6 +217,114 @@
     "table.badHandler": "ui.table: {0} には関数を指定してください"
   },
   "translations": [
+    [
+      "[Cc]annot read property '([^']*)' of (undefined|null)",
+      "$2 のプロパティ '$1' は読み取れません"
+    ],
+    [
+      "[Cc]annot set property '([^']*)' of (undefined|null)",
+      "$2 にプロパティ '$1' は設定できません"
+    ],
+    [
+      "TypeError: not a function",
+      "TypeError: 関数ではない値を呼び出しました（関数名・プロパティ名を確認してください）"
+    ],
+    [
+      "TypeError: not a constructor",
+      "TypeError: コンストラクタではない値に new を使いました"
+    ],
+    [
+      "TypeError: property is not a function",
+      "TypeError: プロパティが関数ではありません"
+    ],
+    [
+      "value is not iterable",
+      "値は反復可能ではありません（for...of やスプレッドには配列などが必要です）"
+    ],
+    [
+      "'([^']*)' is read-only",
+      "const で宣言した変数 '$1' には再代入できません"
+    ],
+    [
+      "([\\w$]+) is not initialized",
+      "初期化前の '$1' にはアクセスできません"
+    ],
+    [
+      "invalid array length",
+      "配列の長さが不正です"
+    ],
+    [
+      "cannot convert to object",
+      "undefined / null はオブジェクトに変換できません"
+    ],
+    [
+      "cannot convert symbol to (string|number)",
+      "Symbol は変換できません"
+    ],
+    [
+      "cannot convert BigInt to number",
+      "BigInt と他の型は混ぜて計算できません"
+    ],
+    [
+      "Unexpected end of JSON input",
+      "JSON が途中で終わっています"
+    ],
+    [
+      "(?:Expected [^\\n]*|Unexpected (?:token|character|non-whitespace character)[^\\n]*) in JSON at position (\\d+)[^\\n]*",
+      "JSON の解析に失敗しました（位置 $1）"
+    ],
+    [
+      "interrupted",
+      "中断しました"
+    ],
+    [
+      "Expected `([^`]*)` but found `EOF`",
+      "\"$1\" が必要ですが、ファイルが終わっています（括弧の閉じ忘れなど）"
+    ],
+    [
+      "Expected `([^`]*)` but found `([^`]*)`",
+      "\"$1\" が必要ですが \"$2\" があります"
+    ],
+    [
+      "^Unexpected token$",
+      "予期しない記号があります"
+    ],
+    [
+      "(?m): Unexpected token$",
+      ": 予期しない記号があります"
+    ],
+    [
+      "Unterminated string",
+      "文字列が閉じられていません"
+    ],
+    [
+      "Unterminated regular expression",
+      "正規表現が閉じられていません"
+    ],
+    [
+      "Unterminated template",
+      "テンプレート文字列が閉じられていません"
+    ],
+    [
+      "Expected a semicolon or an implicit semicolon after a statement, but found none[^\\n]*",
+      "文の区切りが必要です（; の付け忘れ、または余分な語があります）"
+    ],
+    [
+      "A 'return' statement can only be used within a function body\\.?",
+      "トップレベルでは return を使えません（exit() を使ってください）"
+    ],
+    [
+      "`await` is only allowed within async functions[^\\n]*",
+      "async 関数の外では \"await\" を使えません"
+    ],
+    [
+      "Identifier `([^`]*)` has already been declared",
+      "\"$1\" は既に宣言されています"
+    ],
+    [
+      "Invalid Unicode escape sequence",
+      "Unicode エスケープが不正です"
+    ],
     [
       "Cannot read property '([^']*)' of (undefined|null)",
       "$2 のプロパティ '$1' は読み取れません"

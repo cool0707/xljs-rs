@@ -69,3 +69,19 @@ fn keys_used_in_source_exist() {
     }
     assert!(found >= 20, "only {found} keys found; is the pattern still right?");
 }
+
+#[test]
+fn text_japanese() {
+    let _l = lock_lang("ja");
+    for (input, want) in [
+        ("TypeError: cannot read property 'foo' of undefined", "TypeError: undefined のプロパティ 'foo' は読み取れません"),
+        ("ReferenceError: hoge is not defined", "ReferenceError: hoge は定義されていません"),
+        ("TypeError: obj.run is not a function", "TypeError: obj.run は関数ではありません"),
+        (r#"a.js:1:4: Could not resolve "./x.js""#, r#"a.js:1:4: "./x.js" が見つかりません（import のパスを確認してください）"#),
+        ("a.js:2:1: Expected `)` but found `EOF`", "a.js:2:1: \")\" が必要ですが、ファイルが終わっています（括弧の閉じ忘れなど）"),
+        ("sheet 売上 does not exist", r#"シート "売上" はありません"#),
+        ("plain message", "plain message"),
+    ] {
+        assert_eq!(text(input), want, "{input}");
+    }
+}
