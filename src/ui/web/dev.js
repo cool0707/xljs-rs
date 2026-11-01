@@ -134,7 +134,7 @@
     $("welcome").hidden = !welcome;
     $("wizard").hidden = !st.wizard;
     for (const p of ["code", "diff", "preview", "history", "output"]) $("panel-" + p).hidden = welcome || st.wizard || p !== tab;
-    if (tab === "code" && !welcome && !st.wizard) $("code").focus();
+    if (tab === "code" && !welcome && !st.wizard) editor.focus();
     if (tab === "preview") showPreviewHint();
   }
 
@@ -145,6 +145,7 @@
     $("btn-stop").disabled = !st.running;
     $("btn-folder").disabled = !has;
     $("btn-save").disabled = !has;
+    $("btn-format").disabled = !has;
     $("script-name").textContent = has ? st.project.entry : L.noScript || "";
     $("script-dir").textContent = has ? st.project.dir : "";
     document.title = has ? `${st.project.entry} - ${L.title}` : L.title;
@@ -152,26 +153,13 @@
 
   // ------------------------------------------------------------ editor
 
-  const code = () => $("code");
+  let editor = null;
 
-  function renderGutter(mark) {
-    const n = code().value.split("\n").length;
-    const g = $("gutter");
-    g.replaceChildren();
-    for (let i = 1; i <= n; i++) {
-      g.append(el("span", { className: i === mark ? "mark" : "" }, String(i)), "\n");
-    }
-    g.scrollTop = code().scrollTop;
-  }
-
-  let markLine = 0;
   function setEditor(file, text) {
     st.file = file;
     st.saved = text;
     st.dirty = false;
-    code().value = text;
-    markLine = 0;
-    renderGutter();
+    editor.set(file, text);
     $("file-select").value = file;
     $("save-state").textContent = "";
     $("history-title").textContent = fmt(L.historyOf, file);
@@ -187,9 +175,8 @@
 
   let saveTimer = 0;
   function edited() {
-    st.dirty = code().value !== st.saved;
+    st.dirty = editor.value() !== st.saved;
     $("save-state").textContent = st.dirty ? L.unsaved : "";
-    renderGutter(markLine);
     clearTimeout(saveTimer);
     if (st.dirty) saveTimer = setTimeout(save, 1500);
   }
@@ -197,7 +184,7 @@
   function save() {
     clearTimeout(saveTimer);
     if (!st.project || !st.dirty) return;
-    const text = code().value;
+    const text = editor.value();
     send({ op: "save", file: st.file, text });
     st.saved = text;
     st.dirty = false;
@@ -206,41 +193,34 @@
 
   /** Puts the cursor on line (1-based) of the editor and marks it. */
   function gotoLine(line, col) {
-    const lines = code().value.split("\n");
-    line = Math.max(1, Math.min(line, lines.length));
-    let pos = 0;
-    for (let i = 0; i < line - 1; i++) pos += lines[i].length + 1;
-    pos += Math.max(0, Math.min((col || 1) - 1, lines[line - 1].length));
-    markLine = line;
-    renderGutter(line);
     setTab("code");
-    const ta = code();
-    ta.focus();
-    ta.setSelectionRange(pos, pos);
-    const lh = parseFloat(getComputedStyle(ta).lineHeight) || 18;
-    ta.scrollTop = Math.max(0, (line - 1) * lh - ta.clientHeight / 3);
-    $("gutter").scrollTop = ta.scrollTop;
+    editor.goto(line, col);
+  }
+
+  /** Formats the file in the editor (Prettier). */
+  async function formatCode() {
+    if (!st.project || !editor.canFormat()) { status(L.formatUnsupported, "error"); return; }
+    try {
+      await editor.format();
+      status("");
+    } catch (e) {
+      const line = e && e.loc && e.loc.start && e.loc.start.line;
+      const msg = String((e && e.message) || e).split("\n")[0].replace(/\s*\(\d+:\d+\)\s*$/, "");
+      status(line ? fmt(L.formatFailedAt, line, msg) : fmt(L.formatFailed, msg), "error");
+      if (line) editor.goto(line, e.loc.start.column);
+    }
+    editor.focus();
   }
 
   function initEditor() {
-    const ta = code();
-    ta.addEventListener("input", edited);
-    ta.addEventListener("scroll", () => { $("gutter").scrollTop = ta.scrollTop; });
-    ta.addEventListener("keydown", (e) => {
-      if (e.key === "Tab" && !e.ctrlKey && !e.altKey) {
-        e.preventDefault();
-        const s = ta.selectionStart, t = ta.selectionEnd;
-        if (e.shiftKey) return;
-        ta.setRangeText("  ", s, t, "end");
-        edited();
-      }
-    });
+    editor = devEditor.create($("code"), { onChange: edited, onFormat: formatCode });
     $("file-select").addEventListener("change", () => {
       save();
       send({ op: "read", file: $("file-select").value });
       st.wantEditor = $("file-select").value;
     });
     $("btn-save").onclick = save;
+    $("btn-format").onclick = formatCode;
   }
 
   // ------------------------------------------------------------ diff
@@ -474,7 +454,7 @@
     let text = f.prompt;
     if ($("failure-full").checked && st.project) {
       const file = f.location ? f.location.file : st.project.entry;
-      const src = file === st.file ? code().value : null;
+      const src = file === st.file ? editor.value() : null;
       if (src !== null) text += "\n\n" + fmt(L.fullCode, file) + "\n```\n" + src.replace(/\s+$/, "") + "\n```";
     }
     return text;
@@ -679,6 +659,8 @@
     switch (m.type) {
       case "init":
         L = m.texts || {};
+        devTypes.load(m.dts || "");
+        editor.phrases(L);
         for (const e of document.querySelectorAll("[data-t]")) e.textContent = L[e.dataset.t] || e.dataset.t;
         for (const e of document.querySelectorAll("[data-tip]")) e.title = L[e.dataset.tip] || "";
         document.body.dataset.dropHint = L.dropHint || "";
@@ -740,7 +722,7 @@
         break;
       case "versions": renderHistory(m.file, m.versions || []); break;
       case "version":
-        st.versionView = { file: m.file, n: m.n, text: m.text, current: m.file === st.file ? code().value : "" };
+        st.versionView = { file: m.file, n: m.n, text: m.text, current: m.file === st.file ? editor.value() : "" };
         if (m.file !== st.file) { st.wantVersionCurrent = true; send({ op: "read", file: m.file }); }
         showDiff();
         setTab("diff");

@@ -461,6 +461,8 @@ impl Session {
             "services": SERVICES.iter().map(|(n, u)| json!({"name": n, "url": u})).collect::<Vec<_>>(),
             "recent": recent,
             "home": default_dir(&gs),
+            // For the editor's completion (dev-types.js).
+            "dts": crate::DTS,
         })
     }
 

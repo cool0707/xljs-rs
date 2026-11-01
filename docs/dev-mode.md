@@ -11,7 +11,8 @@ AI チャットと並べてスクリプトを作る・直すための画面。�
 | `src/dev/versions.rs` | 簡易バージョニング。置き換える前の内容を `<フォルダ>/.xljs/versions/<相対パス>/NNNN.<拡張子>` に、メモを同じフォルダの `log.json` に |
 | `src/dev/report.rs` | 失敗した実行の stderr から、エラーの部分（`last_error`）と場所（`find_location`）を取り出し、AI への依頼文（`prompt`）を作る。`intro` は `docs/ai/prompt.md`＋今のスクリプト |
 | `src/dev/runner.rs` | スクリプトを別プロセス（この exe 自身）で実行し、stdout/stderr と終了をイベントで返す |
-| `src/ui/web/dev.html` `dev.js` `dev.css` `dev-diff.js` | ページ。キャンバス（タブ）、差分表示（Myers の行差分）、簡易エディタ、プレビュー |
+| `src/ui/web/dev.html` `dev.js` `dev.css` `dev-diff.js` | ページ。キャンバス（タブ）、差分表示（Myers の行差分）、エディタ、プレビュー |
+| `src/ui/web/dev-editor.js` `dev-types.js` | エディタ（後述）。`vendor/codemirror/codemirror.js` は `tools/codemirror` で作る CodeMirror 6 のバンドル |
 | `src/ui/native/browser.rs` | AI チャットの枠: 同じウィンドウの 2 つ目の WebView2（`WindowOptions::browser` / `Window::browser`） |
 
 `ui::run` のスクリプトスレッドでセッションのループ（`mpsc` の受信）を回し、ダイアログ・ウィンドウは通常のスクリプトと同じく UI スレッドへ転送する。
@@ -88,3 +89,14 @@ AI チャットと並べてスクリプトを作る・直すための画面。�
 - `src/dev/tests.rs`: 置き換え先の決定、履歴、エラーの場所と依頼文、セッションの流れ（記録するだけのウィンドウとモック UI）、別プロセスの実行（Linux の `sh`）。
 - `src/engine/tests.rs`: `dev_guard`、フォームのプレビュー、無限ループで中止した場所。
 - ネイティブの枠（2 つ目の WebView2、ダウンロード）は Windows 実機で確認する（`docs/gui-testing.md` の手順）。ページは `XLJS_DEV_DEBUG=1` で開発者ツールが使える。
+
+## エディタ（`dev-editor.js`・`dev-types.js`）
+
+- CodeMirror 6。必要なモジュールだけを `tools/codemirror/index.js` から esbuild で 1 つの IIFE（グローバルの `CM`）にまとめて `src/ui/web/vendor/codemirror/codemirror.js` に置く（`cd tools/codemirror && npm ci && npm run build`。版は `package.json` と `vendor/VERSIONS.md`）。
+- 言語はファイルの拡張子で決める（`.js`・`.ts`・`.json`・`.html`・`.css`。ほかは色分けなし）。ファイルを開くたびに新しい `EditorState`（元に戻す履歴もファイルごと）。エラーの行は `markField`（行の装飾と行番号）。
+- 色はページの CSS 変数（`dev.css` の `--hl-*`・`--editor-*`。ライト・ダーク）。CodeMirror の UI 文言（検索パネルなど）は `devPage.cm*`（`dev-editor.js` の `PHRASES` が英語の文言 → キー）。
+- 補完とホバー（`dev-types.js`）: セッションの `init` が `types/xljs.d.ts`（`crate::DTS`）を `dts` で渡す。型検査器ではなく、d.ts を読む小さなパーサー（interface・class・type・グローバルの const/var/function。JSDoc を説明に）と、構文木（Lezer）をたどる型の解決。
+  - 解決できるもの: グローバル、メンバー・メソッドの戻り値（`Promise` は `await` で外す。オーバーロードは最初のもの）、`x[i]` と `for (... of x)` の要素、`const x = 式`、TS の型注釈、型引数（既定値・制約で置き換え。推論はしない）、引数・プロパティの位置で期待される型（`ui.form({ ` のオプション名、`onSubmit: (v, ctx) => ctx.` や `rows.map((r) => r.` の引数）。
+  - JS の組み込み（Array・String・Date・Map・Math・JSON など）は `dev-types.js` の `BUILTINS` に最小限の宣言を持つ。
+  - 分からない型は何も出さない（CodeMirror の JS の補完＝ローカルの名前・キーワード・スニペットは残る）。
+- 整形（［整形］・Shift+Alt+F）: Prettier の standalone 版（`vendor/prettier`。初めて使うときに `<script>` で読み込む）。パーサーは拡張子で `babel`・`babel-ts`（TS も babel のプラグインで足りるので、大きい typescript のプラグインは入れない）・`json`・`html`・`css`。設定は既定から `printWidth: 100` だけ変える。結果は変わった中ほどだけを 1 回の変更として置き換える（Ctrl+Z で戻せる、表示の位置が飛ばない）。構文エラーはその行へ移動してステータスに出す。
