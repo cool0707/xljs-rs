@@ -128,6 +128,11 @@ pub struct WindowOptions {
 pub struct BrowserOptions {
     /// The folder downloads are saved to.
     pub downloads: String,
+    /// The extensions (without the dot, lower case) of downloads that are
+    /// saved without the browser's check for dangerous file types (which
+    /// asks before keeping a .js file). Only for files that are read as
+    /// text, never run.
+    pub trusted_extensions: Vec<String>,
     /// Receives what happens in the pane; called on the UI thread, must not
     /// block.
     pub on_event: OnBrowser,

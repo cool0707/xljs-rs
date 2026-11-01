@@ -7,7 +7,7 @@ use crate::meta::Meta;
 use crate::{Error, Result};
 
 /// The extensions of the files the development mode edits.
-const TEXT_EXTS: &[&str] = &["js", "mjs", "cjs", "ts", "mts", "json", "html", "htm", "css", "txt", "md"];
+pub const TEXT_EXTS: &[&str] = &["js", "mjs", "cjs", "ts", "mts", "json", "html", "htm", "css", "txt", "md"];
 
 /// The extensions of scripts: a downloaded script may replace one with
 /// another of these (an AI often answers .js for a .ts file).

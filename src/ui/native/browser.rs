@@ -126,6 +126,27 @@ pub(super) fn create(parent: HWND, env: &ICoreWebView2Environment, o: &BrowserOp
             &mut token,
         );
 
+        // Text files (the answers of the chat) are saved without the check
+        // for dangerous file types, which asks before keeping every .js
+        // file (WebView2 1.0.2903+; older runtimes still ask).
+        if let Ok(core26) = core.cast::<ICoreWebView2_26>() {
+            let trusted = o.trusted_extensions.clone();
+            let _ = core26.add_SaveFileSecurityCheckStarting(
+                &SaveFileSecurityCheckStartingEventHandler::create(Box::new(move |_, args: Option<ICoreWebView2SaveFileSecurityCheckStartingEventArgs>| {
+                    let Some(args) = args else { return Ok(()) };
+                    let mut p = PWSTR::null();
+                    if args.FileExtension(&mut p).is_ok() {
+                        let ext = take_pwstr(p).trim_start_matches('.').to_lowercase();
+                        if trusted.iter().any(|t| *t == ext) {
+                            let _ = args.SetSuppressDefaultPolicy(true);
+                        }
+                    }
+                    Ok(())
+                })),
+                &mut token,
+            );
+        }
+
         // Downloads go to the pane's folder without the download bubble.
         if let Ok(core4) = core.cast::<ICoreWebView2_4>() {
             let (on, dir) = (o.on_event.clone(), o.downloads.clone());

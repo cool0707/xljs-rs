@@ -172,6 +172,8 @@ pub fn run(u: Arc<dyn Ui>, o: DevOptions) -> Result<i32> {
         })),
         browser: Some(BrowserOptions {
             downloads: downloads.to_string_lossy().into_owned(),
+            // The answers of the chat are only read and compared.
+            trusted_extensions: project::TEXT_EXTS.iter().map(|e| e.to_string()).collect(),
             on_event: Arc::new(move |e| {
                 let _ = t3.send(Event::Browser(e));
             }),
