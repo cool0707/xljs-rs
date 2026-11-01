@@ -188,8 +188,7 @@
         <button type="button" id="btn-save" class="tool"><i class="fa-regular fa-floppy-disk"></i><span data-t="save"></span></button>
       </div>
       <div class="editor">
-        <pre id="gutter" aria-hidden="true"></pre>
-        <textarea id="code" spellcheck="false" wrap="off"></textarea>
+        <div id="code"></div>
       </div>
     </div>
 
@@ -248,6 +247,9 @@
 <footer>
   <span id="status" class="status"></span>
 </footer>
+<script src="vendor/codemirror/codemirror.js"></script>
+<script src="dev-types.js"></script>
+<script src="dev-editor.js"></script>
 <script src="dev-diff.js"></script>
 <script src="dev.js"></script>
 </body>
