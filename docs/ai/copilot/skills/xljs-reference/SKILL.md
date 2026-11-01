@@ -353,6 +353,7 @@ await ui.form({
 - `fields` に `{ group: "出力", icon: "file-export", help: "説明", fields: [...] }` を項目と並べて書くと見出し付きのグループになる（タブの中でも可。値は項目と同じく 1 つのオブジェクト）。
 - アイコン（Font Awesome Free の名前。`"folder-open"` など）: 項目・タブ・ボタンの `icon`、送信ボタンは `submitIcon`。フォームの `icon` は `titleBar: "custom"` のときだけタイトルバーに出る（それ以外は無視）。
 - アクセントカラー: `accent: "#c42b1c"`（CSS の色。ライト・ダーク共通）か `accent: { light, dark }`。送信ボタン・タブ・フォーカス枠などの色が変わる。
+- 背景色: `background: "#fff8e1"`（CSS の色。ライト・ダーク共通）か `background: { light, dark }`。暗い色なら文字・入力欄もダークの配色になる。
 - `table` に `editable: true` を付けるとセルをその場で編集でき、入力のたびに検証してエラーのセルを赤く表示する（エラーが残っていると送信できない）。検証を通った値は元の行オブジェクトに書き込まれる。
 
 ```js

@@ -49,7 +49,7 @@ function init(m) {
   fields = m.fields || [];
   chartTexts = m.chartTexts || {};
   lang = m.lang || "ja";
-  applyAccent(m.accent || {});
+  applyColors(m.accent || {}, m.background || {});
   if (m.description) {
     $("description").textContent = m.description;
     $("description").hidden = false;
@@ -115,25 +115,49 @@ function init(m) {
 // The accent option: the accent color (buttons, tabs, focus, checkboxes,
 // selected rows, the title bar icon) per theme, with its hover color, the
 // text on it (black or white, whichever reads better) and the selection
-// color derived from it. An unknown color keeps the default.
-function applyAccent(a) {
-  const vars = (c, dark) => {
-    if (!c || !CSS.supports("color", c)) return "";
+// color derived from it. The background option: the page's (and the custom
+// title bar's) background per theme; a dark background in the light theme
+// (or a light one in the dark theme) takes the other theme's text, input and
+// border colors so the page stays readable. An unknown color keeps the default.
+function applyColors(accent, background) {
+  const luminance = (c) => {
     const probe = document.body.appendChild(el("span", { hidden: true }));
     probe.style.color = c;
     const [r, g, b] = (getComputedStyle(probe).color.match(/[\d.]+/g) || [0, 0, 0]).map(Number);
     probe.remove();
     const lin = (v) => ((v /= 255) <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4);
-    const lum = 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
+    return 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
+  };
+  const valid = (c) => !!c && CSS.supports("color", c);
+  const accentVars = (c, dark) => {
+    if (!valid(c)) return "";
     const mix = dark ? "black" : "white";
     return `--accent: ${c}; --accent-hover: color-mix(in srgb, ${c} 88%, ${mix});` +
-      ` --accent-fg: ${lum > 0.18 ? "#000000" : "#ffffff"}; --xljs-titlebar-accent: ${c};` +
+      ` --accent-fg: ${luminance(c) > 0.18 ? "#000000" : "#ffffff"}; --xljs-titlebar-accent: ${c};` +
       ` --sel: color-mix(in srgb, ${c} ${dark ? "45%" : "22%"}, ${dark ? "#202020" : "white"});`;
   };
-  const light = vars(a.light, false), dark = vars(a.dark, true);
+  // The text and control colors of base.css for a light and a dark background.
+  const palettes = {
+    light: { fg: "#1b1b1b", muted: "#616161", border: "#d1d1d1", input: "#ffffff", panel: "#ffffff", alt: "#fafafa" },
+    dark: { fg: "#f3f3f3", muted: "#ababab", border: "#474747", input: "#1f1f1f", panel: "#2b2b2b", alt: "#2f2f2f" },
+  };
+  const backgroundVars = (c, dark) => {
+    if (!valid(c)) return "";
+    const darkBg = luminance(c) <= 0.18;
+    const p = palettes[darkBg ? "dark" : "light"];
+    let vars = `--bg: ${c}; --xljs-titlebar-bg: ${c}; --xljs-titlebar-fg: ${p.fg};` +
+      ` --hover: color-mix(in srgb, ${c} ${darkBg ? "88%" : "92%"}, ${p.fg});`;
+    if (darkBg !== dark) {
+      vars += ` --fg: ${p.fg}; --muted: ${p.muted}; --border: ${p.border}; --input: ${p.input};` +
+        ` --panel: ${p.panel}; --alt: ${p.alt}; --sel-fg: ${darkBg ? "#ffffff" : "#000000"}; color-scheme: ${darkBg ? "dark" : "light"};`;
+    }
+    return vars;
+  };
+  const light = backgroundVars(background.light, false) + " " + accentVars(accent.light, false);
+  const dark = backgroundVars(background.dark, true) + " " + accentVars(accent.dark, true);
   let css = "";
-  if (light) css += `:root { ${light} }\n`;
-  if (dark) css += `@media (prefers-color-scheme: dark) { :root { ${dark} } }\n`;
+  if (light.trim()) css += `:root { ${light.trim()} }\n`;
+  if (dark.trim()) css += `@media (prefers-color-scheme: dark) { :root { ${dark.trim()} } }\n`;
   let style = $("accent-style");
   if (!style) style = document.head.appendChild(el("style", { id: "accent-style" }));
   style.textContent = css;
