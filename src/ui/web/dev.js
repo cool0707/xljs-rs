@@ -145,6 +145,7 @@
     $("btn-stop").disabled = !st.running;
     $("btn-folder").disabled = !has;
     $("btn-save").disabled = !has;
+    $("btn-format").disabled = !has;
     $("script-name").textContent = has ? st.project.entry : L.noScript || "";
     $("script-dir").textContent = has ? st.project.dir : "";
     document.title = has ? `${st.project.entry} - ${L.title}` : L.title;
@@ -196,14 +197,30 @@
     editor.goto(line, col);
   }
 
+  /** Formats the file in the editor (Prettier). */
+  async function formatCode() {
+    if (!st.project || !editor.canFormat()) { status(L.formatUnsupported, "error"); return; }
+    try {
+      await editor.format();
+      status("");
+    } catch (e) {
+      const line = e && e.loc && e.loc.start && e.loc.start.line;
+      const msg = String((e && e.message) || e).split("\n")[0].replace(/\s*\(\d+:\d+\)\s*$/, "");
+      status(line ? fmt(L.formatFailedAt, line, msg) : fmt(L.formatFailed, msg), "error");
+      if (line) editor.goto(line, e.loc.start.column);
+    }
+    editor.focus();
+  }
+
   function initEditor() {
-    editor = devEditor.create($("code"), { onChange: edited });
+    editor = devEditor.create($("code"), { onChange: edited, onFormat: formatCode });
     $("file-select").addEventListener("change", () => {
       save();
       send({ op: "read", file: $("file-select").value });
       st.wantEditor = $("file-select").value;
     });
     $("btn-save").onclick = save;
+    $("btn-format").onclick = formatCode;
   }
 
   // ------------------------------------------------------------ diff

@@ -1,9 +1,11 @@
 {
   "name": "xljs-codemirror",
   "private": true,
-  "description": "Bundles CodeMirror for the development mode's editor",
+  "description": "Bundles CodeMirror and copies Prettier for the development mode editor",
   "scripts": {
-    "build": "esbuild index.js --bundle --minify --format=iife --global-name=CM --legal-comments=eof --outfile=../../src/ui/web/vendor/codemirror/codemirror.js"
+    "build": "npm run build:codemirror && npm run build:prettier",
+    "build:codemirror": "esbuild index.js --bundle --minify --format=iife --global-name=CM --legal-comments=eof --outfile=../../src/ui/web/vendor/codemirror/codemirror.js",
+    "build:prettier": "node copy-prettier.js"
   },
   "dependencies": {
     "@codemirror/autocomplete": "6.20.4",
@@ -16,7 +18,8 @@
     "@codemirror/search": "6.7.2",
     "@codemirror/state": "6.7.6",
     "@codemirror/view": "6.43.15",
-    "@lezer/highlight": "1.2.5"
+    "@lezer/highlight": "1.2.5",
+    "prettier": "3.9.10"
   },
   "devDependencies": {
     "esbuild": "0.28.2"

@@ -2,8 +2,9 @@
 // `CM`) with the highlighting of JS / TS / JSON / HTML / CSS by the file's
 // extension, and the completion and hover texts of dev-types.js.
 //
-//   const ed = devEditor.create(parent, { onChange, onSave });
+//   const ed = devEditor.create(parent, { onChange, onFormat });
 //   ed.set(file, text)  ed.value()  ed.goto(line, col)  ed.mark(line)  ed.focus()
+//   await ed.format()   (Prettier: vendor/prettier, loaded on the first use)
 //   ed.phrases(L)       (the texts of CodeMirror's own UI: search panel...)
 (function () {
   "use strict";
@@ -87,6 +88,50 @@
     });
   }
 
+  // ------------------------------------------------------------ formatter
+
+  // Prettier (vendor/prettier), loaded on the first use. The parser and the
+  // plugins by the file's extension (TypeScript through babel-ts).
+  const FORMATS = {
+    js: ["babel", ["babel", "estree"]], mjs: ["babel", ["babel", "estree"]], cjs: ["babel", ["babel", "estree"]],
+    ts: ["babel-ts", ["babel", "estree"]], mts: ["babel-ts", ["babel", "estree"]], cts: ["babel-ts", ["babel", "estree"]],
+    json: ["json", ["babel", "estree"]],
+    html: ["html", ["html", "babel", "estree", "postcss"]], htm: ["html", ["html", "babel", "estree", "postcss"]],
+    css: ["css", ["postcss"]],
+  };
+  const loaded = {};
+  function loadScript(src) {
+    if (!loaded[src]) {
+      loaded[src] = new Promise((resolve, reject) => {
+        const s = document.createElement("script");
+        s.src = src;
+        s.onload = resolve;
+        s.onerror = () => { delete loaded[src]; reject(new Error("cannot load " + src)); };
+        document.head.append(s);
+      });
+    }
+    return loaded[src];
+  }
+
+  function formatOf(file) {
+    const ext = ((String(file || "").match(/\.([^./\\]+)$/) || [])[1] || "").toLowerCase();
+    return FORMATS[ext] || null;
+  }
+
+  /** Formats text: {text, cursor}. Throws Prettier's error (e.loc.start.line) on a syntax error. */
+  async function formatText(file, text, cursor) {
+    const f = formatOf(file);
+    if (!f) return null;
+    await loadScript("vendor/prettier/standalone.js");
+    await Promise.all(f[1].map((p) => loadScript(`vendor/prettier/plugins/${p}.js`)));
+    const plugins = f[1].map((p) => window.prettierPlugins[p]);
+    const r = await window.prettier.formatWithCursor(text, {
+      parser: f[0], plugins, cursorOffset: cursor,
+      printWidth: 100, tabWidth: 2, endOfLine: "auto",
+    });
+    return { text: r.formatted, cursor: r.cursorOffset };
+  }
+
   function language(file) {
     const ext = (String(file || "").match(/\.([^./\\]+)$/) || [])[1];
     switch ((ext || "").toLowerCase()) {
@@ -150,6 +195,8 @@
         ...CM.foldKeymap,
         ...CM.completionKeymap,
         CM.indentWithTab,
+        // Shift+Alt+F as in VS Code.
+        { key: "Shift-Alt-f", run: () => { if (opts.onFormat) opts.onFormat(); return true; } },
       ]),
       markField,
       markDecorations(),
@@ -173,6 +220,32 @@
         silent = false;
       },
       value: () => view.state.doc.toString(),
+      /** Whether the file's kind can be formatted. */
+      canFormat: () => !!formatOf(file),
+      /**
+       * Formats the document (one undoable change, only the changed middle
+       * replaced so the view keeps its place). false when the kind has no
+       * formatter; throws on a syntax error.
+       */
+      async format() {
+        const f = file, before = view.state.doc.toString();
+        const r = await formatText(f, before, view.state.selection.main.head);
+        if (!r) return false;
+        // Edited or switched while formatting: leave it.
+        if (f !== file || view.state.doc.toString() !== before) return true;
+        if (r.text === before) return true;
+        let a = 0, b = before.length, c = r.text.length;
+        while (a < b && a < c && before.charCodeAt(a) === r.text.charCodeAt(a)) a++;
+        while (b > a && c > a && before.charCodeAt(b - 1) === r.text.charCodeAt(c - 1)) { b--; c--; }
+        const cursor = r.cursor >= 0 ? Math.min(r.cursor, r.text.length) : undefined;
+        view.dispatch({
+          changes: { from: a, to: b, insert: r.text.slice(a, c) },
+          selection: cursor === undefined ? undefined : { anchor: cursor },
+          scrollIntoView: true,
+          userEvent: "format",
+        });
+        return true;
+      },
       focus: () => view.focus(),
       /** Marks line (1-based; 0 clears). */
       mark(line) { view.dispatch({ effects: setMark.of(line || 0) }); },

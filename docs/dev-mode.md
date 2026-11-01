@@ -99,3 +99,4 @@ AI チャットと並べてスクリプトを作る・直すための画面。�
   - 解決できるもの: グローバル、メンバー・メソッドの戻り値（`Promise` は `await` で外す。オーバーロードは最初のもの）、`x[i]` と `for (... of x)` の要素、`const x = 式`、TS の型注釈、型引数（既定値・制約で置き換え。推論はしない）、引数・プロパティの位置で期待される型（`ui.form({ ` のオプション名、`onSubmit: (v, ctx) => ctx.` や `rows.map((r) => r.` の引数）。
   - JS の組み込み（Array・String・Date・Map・Math・JSON など）は `dev-types.js` の `BUILTINS` に最小限の宣言を持つ。
   - 分からない型は何も出さない（CodeMirror の JS の補完＝ローカルの名前・キーワード・スニペットは残る）。
+- 整形（［整形］・Shift+Alt+F）: Prettier の standalone 版（`vendor/prettier`。初めて使うときに `<script>` で読み込む）。パーサーは拡張子で `babel`・`babel-ts`（TS も babel のプラグインで足りるので、大きい typescript のプラグインは入れない）・`json`・`html`・`css`。設定は既定から `printWidth: 100` だけ変える。結果は変わった中ほどだけを 1 回の変更として置き換える（Ctrl+Z で戻せる、表示の位置が飛ばない）。構文エラーはその行へ移動してステータスに出す。
