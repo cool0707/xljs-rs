@@ -22,6 +22,7 @@
     root.classList.toggle("xljs-inactive", !active);
     for (const b of document.querySelectorAll('[data-xljs-window="maximize"]')) {
       b.title = maximized ? cfg.texts.restore : cfg.texts.maximize;
+      if (b.classList.contains("xljs-tb-btn")) b.setAttribute("aria-label", b.title);
       if (b.classList.contains("xljs-tb-btn")) b.textContent = maximized ? "" : "";
     }
   };
@@ -97,6 +98,8 @@
         b.className = "xljs-tb-btn xljs-tb-" + cmd;
         b.setAttribute("data-xljs-window", cmd);
         b.title = cfg.texts[cmd];
+        // The glyph (a private-use character) gives no name to screen readers.
+        b.setAttribute("aria-label", cfg.texts[cmd]);
         b.textContent = glyph;
         bar.appendChild(b);
       }

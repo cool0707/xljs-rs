@@ -45,11 +45,35 @@ function drawnCharts() {
   return n;
 }
 
+/**
+ * Numbers that do not fit their cell are shown as ### filling it, as Excel
+ * prints them (cut digits or dates would read as other values).
+ */
+function hashNumbers() {
+  const range = document.createRange();
+  for (const d of document.querySelectorAll(".xljs-sheet div[data-n]")) {
+    const cs = getComputedStyle(d);
+    const room = d.getBoundingClientRect().width - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+    const fits = () => {
+      range.selectNodeContents(d);
+      return range.getBoundingClientRect().width <= room + 0.01;
+    };
+    if (fits()) continue;
+    let s = "#";
+    d.textContent = s + "#";
+    while (s.length < 200 && fits()) {
+      s += "#";
+      d.textContent = s + "#";
+    }
+    d.textContent = s;
+  }
+}
+
 /** Draws the charts into their boxes; resolves when they are drawn. */
 async function drawCharts(charts, m) {
   const boxes = Array.from(document.querySelectorAll(".xljs-print-chart[data-chart]"));
   if (!boxes.length) return;
-  const ctx = { lang: m.lang || "ja", texts: m.texts || {}, dark: false };
+  const ctx = { lang: m.lang || "ja", texts: m.texts || {}, dark: false, print: true };
   for (const box of boxes) {
     const c = charts[Number(box.dataset.chart)];
     if (!c || c.error) {
@@ -80,6 +104,7 @@ host.on(async (m) => {
     place(m.html);
     if (document.fonts && document.fonts.ready) await Promise.race([document.fonts.ready, wait(3000)]);
     await Promise.all(Array.from(document.images).map((img) => (img.complete ? null : new Promise((r) => { img.onload = img.onerror = r; }))));
+    hashNumbers();
     await drawCharts(m.charts || [], m);
     host.send({ type: "rendered", charts: document.querySelectorAll(".xljs-print-chart.xljs-chart").length, drawn: drawnCharts() });
   } catch (e) {
