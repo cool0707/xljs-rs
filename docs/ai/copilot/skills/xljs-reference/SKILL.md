@@ -1,6 +1,6 @@
 ---
 name: xljs-reference
-description: xljs（Excel・CSV・JSON を JavaScript で処理する Windows 用の実行環境）の詳しい API リファレンスとレシピ。xljs のスクリプトを書く・直すときに、全オプション・書式・PDF 出力・入力フォーム（ui.form）・表（ui.table）・グラフ（ui.chart）・日付（dayjs）・アプリモードを確かめるために使う。
+description: xljs（Excel・CSV・JSON を JavaScript で処理する Windows 用の実行環境）の詳しい API リファレンスとレシピ。xljs のスクリプトを書く・直すときに、全オプション・書式・PDF 出力・PDF の編集・入力フォーム（ui.form）・表（ui.table）・グラフ（ui.chart）・日付（dayjs）・アプリモードを確かめるために使う。
 ---
 
 # xljs API リファレンス（AI チャット向け）
@@ -218,6 +218,31 @@ await xljs.htmlToPdf("<h1>報告書</h1><p>本文</p>", "報告書.pdf", { paper
 - `options` で上書きできる: `paper`（`"A3"` `"A4"` `"B5"` `"Letter"` など）`landscape` `scale`（%）`fitToWidth` `fitToHeight` `fitToPage` `margin`（mm）`gridLines` `centerHorizontally` `charts: false` `sheets`。
 - 値・表示形式・フォント・塗り・罫線・結合・折り返し・回転・画像・図形とテキストボックス（よく使う形。ほかの形は四角になる）・線と矢印・グラフ（`sheet.charts` で描けるもの）を描く。条件付き書式・SmartArt・Excel 2016 以降のグラフは描かない。自動の改ページの位置は Excel と少し違うことがある。
 - `toHtml(options?)` は同じページを HTML の文字列で返す（グラフは空の枠）。
+
+## PDF の編集（pdf）
+
+PDF の結合・ページの削除・挿入・回転・文字の追加ができる（Excel・Acrobat・WebView2 は不要。mock・コンソールでも動く）。ページ番号は 1 始まり、位置は mm、文字の大きさは pt。
+
+```js
+const doc = pdf.open("報告書.pdf");                    // パスワード付きは pdf.open(p, { password: "..." })
+doc.append("別紙.pdf");                                 // 最後に結合（{ pages: "1-3" } で一部だけ）
+doc.insert(2, "差し込み.pdf", { pages: [1] });          // 2 ページ目の前に挿入
+doc.insertBlankPage(1, { paper: "A4" });                // 白紙のページ（表紙）
+doc.removePages("5-6,-1");                              // 削除（-1 は最後のページ）
+doc.rotatePages(3, 90);                                 // 時計回りに回転
+doc.addText(1, "提出用", { x: 20, y: 15, size: 14, color: "red" });
+doc.addText("all", (p) => `${p.number} / ${p.count}`, { bottom: 10, align: "center", size: 9 }); // ページ番号
+doc.save("報告書_提出用.pdf");                          // 省略で上書き
+doc.close();
+const p = pdf.merge(["a.pdf", "b.pdf", "c.pdf"], "まとめ.pdf"); // 結合して保存（保存先を省くと文書を返す）
+```
+
+- ページの指定: 番号・番号の配列・`"1-3,5"`・`"3-"`（3 ページ目から最後まで）・`"all"`。負の番号は後ろから。
+- `doc.pageCount`、`doc.pages`（`[{ number, width, height, rotation }]`。表示したときの大きさ（mm）と回転）。
+- `insert` / `append` の取り込み元は PDF ファイル（パス・ハンドル・`File`・`Blob`・`ArrayBuffer`）か別の `PdfDocument`。自分自身を渡すとページの複製になる。しおり（アウトライン）とフォームの定義は取り込まない。
+- `addText` のオプション: `x` `y`（左上からの位置。`y` は文字の上端）、`right` `bottom`（右端・下端からの位置）、`size`（既定 11）、`color`（`"#rrggbb"` か色名）、`opacity`（0〜1）、`align`（`"left"` `"center"` `"right"`。`center` は `x` が中央、`x` を省くとページの中央）、`lineHeight`（既定 1.3）、`rotate`（度、反時計回り）、`font`（`"游ゴシック"` `"メイリオ"` `"ＭＳ 明朝"` などの名前かフォントファイルのパス。配列なら文字ごとに前から探す）。`"\n"` で改行。回転したページでも見た目の向きで置く。
+- 文字はフォントの使った字だけを埋め込むので、検索・コピーできる。既定のフォントは游ゴシック（Windows）。
+- 保存した PDF は暗号化しない（パスワードは外れる）。電子署名は無効になる。
 
 ## CSV
 

@@ -26,6 +26,7 @@ if (dest) {
 - **言語**: ES2023 相当（オプショナルチェーン、`??`、async/await、トップレベル await、クラスフィールドなど）と TypeScript。`import` でファイル分割可能
 - **ファイル操作**: ブラウザの File System Access API 風（`showOpenFilePicker` / `FileSystemFileHandle` など）＋ フォルダ走査などの独自拡張
 - **Excel**: xlsx の読み書き（[umya-spreadsheet](https://github.com/MathNya/umya-spreadsheet)）。値は数値・文字列・真偽値・`Date` で受け渡し
+- **PDF**: Excel で印刷したときと同じページでの PDF 出力（WebView2）、PDF の結合・ページの削除・挿入・回転・文字の追加（Excel・Acrobat 不要）
 - **CSV / JSON**: Shift_JIS(CP932) / UTF-8 の自動判定、BOM 付き UTF-8 での書き出し、JSON Lines
 - **エクスプローラー連携**: 出力したファイルを選択した状態でエクスプローラーを開く、既定のアプリで開く
 - **UI**: Windows ネイティブのダイアログ（メッセージボックス、ファイル選択、進捗ダイアログ）。コンソールでも動作
@@ -460,6 +461,26 @@ sheet.cell("A1").getStyle();   // 現在の書式を取得
 - 既定では既存の書式にマージします。`{ replace: true }` を渡すと書式を置き換えます。
 - 範囲の端に引いた罫線は、隣の（書式が設定済みの）セルの接する辺にも反映するので、線が食い違いません。
 - サンプル: `examples/xlsx-style-report.js`
+
+### PDF の編集（`pdf`）
+
+```js
+const doc = pdf.open("報告書.pdf");                   // パス・ハンドル・File・Blob・ArrayBuffer（パスワード付きは { password }）
+doc.append("別紙.pdf", { pages: "1-3" });              // 結合（ページを選んで）
+doc.insert(2, "差し込み.pdf");                         // 2 ページ目の前に挿入
+doc.insertBlankPage(1, { paper: "A4" });               // 白紙のページ
+doc.removePages("5-6,-1");                             // 削除（負の番号は後ろから）
+doc.rotatePages(3, 90);                                // 時計回りに回転
+doc.addText("all", (p) => `${p.number} / ${p.count}`, { bottom: 10, align: "center", size: 9 });
+doc.addText(1, "社外秘", { x: 105, y: 140, align: "center", size: 48, color: "red", opacity: 0.3, rotate: 30 });
+doc.save("報告書_提出用.pdf");
+pdf.merge(["a.pdf", "b.pdf"], "まとめ.pdf");           // まとめて結合して保存
+```
+
+- Excel・Acrobat・WebView2 がなくても動きます（コンソール・モックでも可）。ページ番号は 1 始まり、位置は mm（表示したときのページの左上から。回転したページでも見た目の向き）、文字の大きさは pt です。
+- `addText` の文字は、フォントのうち使った字だけを PDF に埋め込みます（検索・コピーできます）。フォントは `font` に名前（`"游ゴシック"` `"メイリオ"` `"ＭＳ 明朝"` など）かファイルのパスで指定し、既定は表示言語の Excel のフォント（日本語は游ゴシック）です。配列にすると文字ごとに前から順に探します。
+- ページを取り込むとき、しおり（アウトライン）・フォームの定義・ページラベルは引き継ぎません。保存した PDF は暗号化されず、電子署名は無効になります。
+- サンプル: `examples/pdf-merge-stamp.js`。仕組みは `docs/pdf-edit.md`
 
 ### 日付（Day.js）
 
