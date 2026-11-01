@@ -147,6 +147,23 @@ if (JSON.stringify(b.sheets["集計"].toObjects()) !== '[{"商品名":"(未設�
         Find-XljsElement -Root $m -Name 'OK' -ClassName Button | Invoke-XljsElement
         Wait-Exit $p
     }
+
+    # 無限ループ → --watchdog の確認（キャンセルで続行して再度尋ねる、OK で終了コード 130）
+    Test-Case watchdog {
+        $f = "$OutDir/loop.js"
+        Set-Content $f 'while (true) {}' -Encoding utf8
+        $p = Start-Xljs @('--watchdog=2', $f)
+        $m = Get-XljsWindow -ProcessId $p.Id -Name 'loop'
+        Save-XljsScreenshot "$shots/watchdog.png" -Window $m | Out-Null
+        $t = Get-AllText $m
+        Assert ($t -like '*2 秒以上応答していません*') "watchdog text: $t"
+        Find-XljsElement -Root $m -Name 'キャンセル' -ClassName Button | Invoke-XljsElement
+        Start-Sleep 1
+        $m = Get-XljsWindow -ProcessId $p.Id -Name 'loop'
+        Find-XljsElement -Root $m -Name 'OK' -ClassName Button | Invoke-XljsElement
+        Wait-Exit $p
+        Assert ($p.ExitCode -eq 130) "exit code $($p.ExitCode)"
+    }
 } finally {
     Stop-XljsMute
     if ($MonitorOff) { Stop-XljsAwake }

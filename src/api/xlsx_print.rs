@@ -1486,7 +1486,9 @@ fn page_table(sh: &Sheet, cols: &[u32], rows: &[u32], classes: &mut Classes, out
                         _ => {}
                     }
                 }
-                let _ = write!(out, "<div style=\"left:{}pt;width:{}pt;height:{}pt\">", n(-left), n(w + left + right), n(h));
+                // data-n: a number that does not fit is shown as ### (print-page.js measures it).
+                let num = if matches!(val, Val::Num(..)) && !css.rotated { " data-n" } else { "" };
+                let _ = write!(out, "<div{num} style=\"left:{}pt;width:{}pt;height:{}pt\">", n(-left), n(w + left + right), n(h));
                 let text = cell_html(sh, vc, vr, &val, css.wrap);
                 if css.rotated && st.alignment().map(|a| a.text_rotation()).unwrap_or(0) != 255 {
                     let rot = st.alignment().map(|a| a.text_rotation()).unwrap_or(0);

@@ -190,7 +190,10 @@
           const out = fmt(/%/.test(yf.replace(/"[^"]*"/g, "")) ? yf : "0%", p.value / 100);
           return out === null ? undefined : out;
         }
-        f = ax(axis).format || spec.format || "";
+        // Without a format of the axis, the one of its series when they agree ("0%" of a rate on y2).
+        const own = bound.filter((s) => s.axis === axis).map((s) => s.format);
+        const shared = own.length && own.every((x) => x && x === own[0]) ? own[0] : "";
+        f = ax(axis).format || shared || spec.format || "";
       } else f = seriesFormat(p.key);
       const out = fmt(f ? String(f) : "", p.value);
       return out === null ? undefined : out;
@@ -338,8 +341,9 @@
       readonly_dates: !edit.dates,
       readonly_progress: !edit.progress,
       holidays: { "var(--g-weekend-highlight-color)": holidays },
-      today_button: true,
-      view_mode_select: spec.viewSelect !== false,
+      // On paper (ctx.print) the buttons are of no use.
+      today_button: !ctx.print,
+      view_mode_select: !ctx.print && spec.viewSelect !== false,
       infinite_padding: false,
       // The first task (Frappe Gantt takes a date string).
       scroll_to: tasks.length ? tasks.reduce((a, t) => (t.start < a ? t.start : a), tasks[0].start).slice(0, 10) : "today",
@@ -534,6 +538,18 @@
 
   const escape = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
 
+  /**
+   * With container_height "auto" Frappe Gantt makes the container as tall
+   * as the chart, so a horizontal scrollbar that takes room (Windows) hides
+   * the last row and adds a vertical scrollbar: make room for it.
+   */
+  function fitScrollbar(g) {
+    const c = g.$container;
+    if (g.options.container_height !== "auto" || !c) return;
+    const bar = c.offsetHeight - c.clientHeight;
+    if (bar > 0) c.style.height = g.grid_height + bar + "px";
+  }
+
   /** Translates the buttons of Frappe Gantt's side header (Today, Mode and the view names). */
   function patchGantt() {
     const G = window.Gantt;
@@ -555,6 +571,7 @@
     const render = G.prototype.render;
     G.prototype.render = function () {
       render.apply(this, arguments);
+      fitScrollbar(this);
       drawOverlay(this);
     };
     G.prototype.__xljs = true;
@@ -590,7 +607,7 @@
 
   /**
    * Draws spec in el. ctx: { lang, texts, onClick(index, info),
-   * onChange(index, changes), height (Gantt, px) }. Returns { update(spec),
+   * onChange(index, changes), height (Gantt, px), print }. Returns { update(spec),
    * destroy() }; update replaces the chart's definition.
    */
   function create(el, spec, ctx = {}) {
