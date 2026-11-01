@@ -2,6 +2,7 @@
 //! the prelude that builds the public objects (fs, path, csv, workbooks,
 //! pickers, ui, console, polyfills) on top of them.
 
+mod ad;
 mod app;
 mod csv;
 mod dayjs;
@@ -340,6 +341,7 @@ pub(crate) fn install_natives<'js>(ctx: &Ctx<'js>, host: &Rc<Host>) -> rquickjs:
     vba::install(&n);
     ui::install(&n);
     app::install(&n);
+    ad::install(&n);
     Ok(obj)
 }
 
@@ -379,6 +381,8 @@ fn install_core(n: &N) {
     n.val("script", env.script.clone());
     n.val("version", env.version.clone());
     n.val("platform", platform());
+    n.val("computerName", computer_name());
+    n.val("userName", user_name());
     n.val("uiName", env.ui.name());
     n.val("lang", i18n::lang());
     n.set("t", |_, a| {
@@ -395,6 +399,45 @@ pub fn platform() -> &'static str {
         "macos" => "darwin",
         os => os,
     }
+}
+
+/// The name of this computer (NetBIOS name on Windows, like %COMPUTERNAME%).
+#[cfg(windows)]
+pub fn computer_name() -> String {
+    use windows::Win32::System::SystemInformation::*;
+    let mut buf = [0u16; 256];
+    let mut n = buf.len() as u32;
+    match unsafe { GetComputerNameExW(ComputerNameNetBIOS, Some(windows::core::PWSTR(buf.as_mut_ptr())), &mut n) } {
+        Ok(()) => String::from_utf16_lossy(&buf[..n as usize]),
+        Err(_) => std::env::var("COMPUTERNAME").unwrap_or_default(),
+    }
+}
+
+#[cfg(not(windows))]
+pub fn computer_name() -> String {
+    std::fs::read_to_string("/proc/sys/kernel/hostname")
+        .or_else(|_| std::fs::read_to_string("/etc/hostname"))
+        .map(|s| s.trim().to_string())
+        .or_else(|_| std::env::var("HOSTNAME"))
+        .unwrap_or_default()
+}
+
+/// The logon name of the user running the script (without the domain).
+#[cfg(windows)]
+pub fn user_name() -> String {
+    use windows::Win32::System::WindowsProgramming::GetUserNameW;
+    let mut buf = [0u16; 257];
+    let mut n = buf.len() as u32;
+    match unsafe { GetUserNameW(Some(windows::core::PWSTR(buf.as_mut_ptr())), &mut n) } {
+        // n counts the terminating NUL.
+        Ok(()) => String::from_utf16_lossy(&buf[..(n as usize).saturating_sub(1)]),
+        Err(_) => std::env::var("USERNAME").unwrap_or_default(),
+    }
+}
+
+#[cfg(not(windows))]
+pub fn user_name() -> String {
+    std::env::var("USER").or_else(|_| std::env::var("LOGNAME")).unwrap_or_default()
 }
 
 /// Raises err as a JavaScript Error with a localized message.

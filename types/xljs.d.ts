@@ -17,6 +17,10 @@ declare global {
     readonly scriptDir: string;
     /** "windows" / "linux" / "darwin" */
     readonly platform: string;
+    /** このコンピューターの名前（%COMPUTERNAME% と同じ。AD がなくても使える） */
+    readonly computerName: string;
+    /** スクリプトを実行しているユーザーのログオン名（ドメイン名なし。%USERNAME% と同じ） */
+    readonly userName: string;
     /** 使用中の UI: "native" / "console" / "mock" */
     readonly ui: string;
     /** ダイアログのタイトル（既定はスクリプト名） */
@@ -1016,6 +1020,180 @@ declare global {
     open(target: PathLike): void;
   }
   const shell: Shell;
+
+  // ------------------------------------------------------------------ ad (Active Directory)
+
+  /** ad.search / ad.get で使えるオブジェクトの種類。"ou" は "organizationalUnit"、"all" はすべて */
+  type ADObjectType = "user" | "computer" | "group" | "contact" | "organizationalUnit" | "ou" | "all";
+
+  /**
+   * ディレクトリのオブジェクト。キーは LDAP の属性名（大文字・小文字も同じ）。
+   * 日時は Date（なし・無期限は null）、SID・GUID は文字列、複数の値を持つ属性は配列、バイナリは ArrayBuffer。
+   * 値のない属性はキーごとない（memberOf などの複数値の属性は []）
+   */
+  interface ADObject {
+    /** 種類: "user" / "computer" / "group" / "contact" / "organizationalUnit"（ほかは objectClass の最後） */
+    type: string;
+    /** 名前（cn。OU なら ou） */
+    name: string;
+    /** 識別名（"CN=山田 太郎,OU=営業部,DC=corp,DC=example,DC=com"） */
+    distinguishedName: string;
+    objectClass: string[];
+    objectGUID: string;
+    /** "S-1-5-21-..." */
+    objectSid?: string;
+    /** ログオン名（Windows 2000 より前）。コンピューターは末尾に "$" */
+    sAMAccountName?: string;
+    /** ユーザー プリンシパル名（"yamada@corp.example.com"） */
+    userPrincipalName?: string;
+    /** 表示名 */
+    displayName?: string;
+    /** 名 */
+    givenName?: string;
+    /** 姓 */
+    sn?: string;
+    mail?: string;
+    /** 部署 */
+    department?: string;
+    /** 役職 */
+    title?: string;
+    /** 会社 */
+    company?: string;
+    description?: string;
+    /** 社員番号 */
+    employeeID?: string;
+    telephoneNumber?: string;
+    mobile?: string;
+    /** 事業所 */
+    physicalDeliveryOfficeName?: string;
+    /** 上司の識別名 */
+    manager?: string;
+    /** 直接所属するグループの識別名（プライマリ グループ「Domain Users」などは含まない） */
+    memberOf?: string[];
+    userAccountControl?: number;
+    /** ロックアウトされた日時（null はロックアウトされていない） */
+    lockoutTime?: Date | null;
+    /** 最終ログオン（ドメインコントローラー間で同期される値。最大 14 日ほど遅れる） */
+    lastLogonTimestamp?: Date | null;
+    /** パスワードを最後に変更した日時（null は次回ログオン時に変更が必要） */
+    pwdLastSet?: Date | null;
+    /** アカウントの有効期限（null は無期限） */
+    accountExpires?: Date | null;
+    /** 作成日時 */
+    whenCreated?: Date;
+    /** 更新日時 */
+    whenChanged?: Date;
+    /** コンピューターの DNS 名 */
+    dNSHostName?: string;
+    /** コンピューターの OS（"Windows 11 Pro"） */
+    operatingSystem?: string;
+    operatingSystemVersion?: string;
+    groupType?: number;
+    /** グループの管理者の識別名 */
+    managedBy?: string;
+    /** グループのメンバーの識別名（properties: ["member"] を指定したとき） */
+    member?: string[];
+    /** アカウントが有効か（ユーザー・コンピューター） */
+    enabled?: boolean;
+    /** ロックアウト中か（ユーザー・コンピューター） */
+    lockedOut?: boolean;
+    /** パスワードの期限が切れているか（ユーザー・コンピューター） */
+    passwordExpired?: boolean;
+    /** パスワードを無期限にしているか（ユーザー・コンピューター） */
+    passwordNeverExpires?: boolean;
+    /** グループのスコープ */
+    groupScope?: "domainLocal" | "global" | "universal" | "builtin";
+    /** セキュリティ グループか配布グループか */
+    groupCategory?: "security" | "distribution";
+    /** properties で指定したほかの属性 */
+    [attribute: string]: unknown;
+  }
+
+  /**
+   * filter のオブジェクト形式。属性ごとの条件をすべて満たすものを探す（AND）。
+   * 文字列は一致（"*" は任意の文字列）、配列はどれかに一致、true は値がある、false / null は値がない（undefined はエラー）
+   */
+  type ADFilter = { [attribute: string]: string | number | boolean | null | (string | number)[] };
+
+  interface ADConnectOptions {
+    /** 接続するドメインコントローラーまたはドメインの名前（既定はこのコンピューターのドメイン） */
+    server?: string;
+  }
+
+  interface ADGetOptions extends ADConnectOptions {
+    /** 既定の属性に加えて読む属性（"*" ですべて） */
+    properties?: string[];
+  }
+
+  /** ad.search のオプション。指定した条件をすべて満たすものを探す */
+  interface ADSearchOptions extends ADGetOptions {
+    /** 種類（既定は "user"。配列でどれか） */
+    type?: ADObjectType | ADObjectType[];
+    /** 名前・ログオン名・表示名・UPN・メールのどれかに一致（"山田*" のように * が使える） */
+    name?: string;
+    /** 属性の条件（{ department: "営業部", title: ["課長", "部長"] }）か LDAP のフィルタ（"(title=課長)"）。配列で複数 */
+    filter?: ADFilter | string | (ADFilter | string)[];
+    /** true で無効なアカウントだけ、false で有効なものだけ（Search-ADAccount -AccountDisabled） */
+    disabled?: boolean;
+    /** true でロックアウト中のアカウントだけ（Search-ADAccount -LockedOut） */
+    lockedOut?: boolean;
+    /** true で有効期限切れのアカウントだけ（Search-ADAccount -AccountExpired） */
+    expired?: boolean;
+    /** 指定の日数以内に有効期限が来るアカウント（Search-ADAccount -AccountExpiring） */
+    expiringDays?: number;
+    /**
+     * 指定の日数ログオンしていないアカウント（一度もログオンしていないものを含む。Search-ADAccount -AccountInactive）。
+     * lastLogonTimestamp で判定するので 14 日より短い日数は正確でない
+     */
+    inactiveDays?: number;
+    /** true でパスワードの期限が切れたアカウントだけ（Search-ADAccount -PasswordExpired） */
+    passwordExpired?: boolean;
+    /** true でパスワード無期限のアカウントだけ（Search-ADAccount -PasswordNeverExpires） */
+    passwordNeverExpires?: boolean;
+    /** このグループ（名前か識別名）のメンバー */
+    memberOf?: string;
+    /** memberOf でグループの中のグループのメンバーも含める */
+    recursive?: boolean;
+    /** 検索する場所（OU などの識別名。既定はドメイン全体） */
+    searchBase?: string;
+    /** searchBase からの範囲（既定 "subtree"＝配下すべて、"onelevel"＝直下だけ、"base"＝それ自身） */
+    scope?: "subtree" | "onelevel" | "base";
+    /** 最大件数（既定は無制限） */
+    limit?: number;
+  }
+
+  /**
+   * Active Directory（Windows のみ）。サインイン中のユーザーの権限で、このコンピューターのドメインを検索する。
+   * PowerShell の Get-ADUser / Get-ADComputer / Get-ADGroup / Search-ADAccount に当たるものを ad.search 1 つで行う
+   */
+  interface AD {
+    /** このコンピューターがドメインに参加しているか（ドメインには問い合わせない） */
+    available(): boolean;
+    /** ドメインの情報 */
+    domain(options?: ADConnectOptions): {
+      /** DNS 名（"corp.example.com"） */
+      name: string;
+      /** NetBIOS 名（"CORP"。読めなければ null） */
+      netbiosName: string | null;
+      distinguishedName: string;
+      /** フォレストのルートドメインの DNS 名 */
+      forest: string;
+      /** 接続したドメインコントローラー */
+      server: string;
+    };
+    /** サインイン中のユーザー（ドメインのアカウントでなければエラー） */
+    me(options?: ADGetOptions): ADObject;
+    /** このコンピューター */
+    computer(options?: ADGetOptions): ADObject;
+    /**
+     * 1 件取得する。identity は識別名・ログオン名（"CORP\\yamada" も可。コンピューターは "$" なしでも可）・
+     * UPN・メールアドレス・SID・GUID・名前のどれか。見つからなければ null
+     */
+    get(identity: string, options?: ADGetOptions & { type?: ADObjectType | ADObjectType[] }): ADObject | null;
+    /** 検索する（文字列なら name での検索）。条件がなければ全ユーザー */
+    search(options?: ADSearchOptions | string): ADObject[];
+  }
+  const ad: AD;
 
   interface Path {
     readonly sep: string;

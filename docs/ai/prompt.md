@@ -49,7 +49,9 @@ console.log("ログ", obj);
 exit();                                         // exit(1) で異常終了
 xljs.args                                       // 引数（exe にドロップしたファイルのパスなど）
 xljs.scriptDir                                  // スクリプトのあるフォルダ
+xljs.computerName; xljs.userName                // コンピューター名 / ログオン中のユーザー名
 shell.showItemInFolder(dest); shell.openPath(dest); // エクスプローラーで見せる / 既定のアプリで開く
+ad.me(); ad.search({ filter: { department: "営業部" } }); ad.search({ disabled: true }); // Active Directory（ドメイン参加の Windows。読むだけ）
 ```
 
 ## ファイル・フォルダ

@@ -797,6 +797,8 @@
     script: native.script,
     scriptDir: native.pathDirname(native.script),
     platform: native.platform,
+    computerName: native.computerName,
+    userName: native.userName,
     ui: native.uiName,
     title: native.title,
     exit: (code = 0) => native.exit(code),
@@ -892,6 +894,29 @@
   shellObj.showInFolder = shellObj.showItemInFolder;
   shellObj.open = (target) => (isURL(target) ? shellObj.openExternal(target) : shellObj.openPath(target));
   defineGlobal("shell", shellObj);
+
+  // ---------------------------------------------------------------- ad
+
+  const adOptions = (o, name) => {
+    if (o === undefined || o === null) return {};
+    if (typeof o !== "object") throw new TypeError(T("ad.expectedOptions", name));
+    return o;
+  };
+  const adObj = {
+    /** Whether this computer is joined to a domain (without asking the domain). */
+    available: () => native.adJoined(),
+    /** The domain: { name, netbiosName, distinguishedName, forest, server }. */
+    domain: (options) => native.adDomain(String(adOptions(options, "ad.domain()").server || "")),
+    /** The signed-in user. */
+    me: (options) => native.adMe(false, adOptions(options, "ad.me()")),
+    /** This computer. */
+    computer: (options) => native.adMe(true, adOptions(options, "ad.computer()")),
+    /** One object by DN, sAMAccountName, UPN, mail, SID, GUID or name; null when not found. */
+    get: (identity, options) => native.adGet(String(identity ?? ""), adOptions(options, "ad.get()")),
+    /** Users (by default), computers, groups ... A string searches by name. */
+    search: (options) => native.adSearch(typeof options === "string" ? { name: options } : adOptions(options, "ad.search()")),
+  };
+  defineGlobal("ad", adObj);
 
   // ---------------------------------------------------------------- progress
 

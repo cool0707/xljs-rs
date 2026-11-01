@@ -2,6 +2,7 @@
 //! and JSON files, with file pickers, dialogs, progress indicators and HTML
 //! windows (WebView2). See README.md.
 
+pub mod ad;
 pub mod api;
 pub mod cli;
 pub mod engine;
