@@ -7,23 +7,27 @@ use crate::t;
 // What the start screen offers, in its order.
 const LAUNCH_RUN: i64 = 0;
 const LAUNCH_DEBUG: i64 = 1;
-const LAUNCH_PACK: i64 = 2;
-const LAUNCH_VBA: i64 = 3;
+const LAUNCH_DEV: i64 = 2;
+const LAUNCH_PACK: i64 = 3;
+const LAUNCH_VBA: i64 = 4;
 
 // Icons of the choices (drawn by tools/make_launch_icons.py).
 const ICON_RUN: &[u8] = include_bytes!("icons/run.ico");
 const ICON_DEBUG: &[u8] = include_bytes!("icons/debug.ico");
+const ICON_DEV: &[u8] = include_bytes!("icons/dev.ico");
 const ICON_PACK: &[u8] = include_bytes!("icons/pack.ico");
 const ICON_VBA: &[u8] = include_bytes!("icons/vba.ico");
 
 /// The start screen of xljs started without a script (double-clicked): it
-/// asks whether to run, debug or pack a script, or to extract the VBA code
-/// of macro workbooks, and asks for the files.
+/// asks whether to run, debug or pack a script, to open the development
+/// mode, or to extract the VBA code of macro workbooks, and asks for the
+/// files.
 pub(super) fn launch(con: &ConsoleState, u: Arc<dyn Ui>, explicit_lang: bool, stop: &super::Stop) -> i32 {
     let choice = |label: &str, note: &str, icon: &[u8]| Choice { label: t!(label), note: t!(note), icon: icon.to_vec() };
     let choices = [
         choice("cli.launchRun", "cli.launchRunNote", ICON_RUN),
         choice("cli.launchDebug", "cli.launchDebugNote", ICON_DEBUG),
+        choice("cli.launchDev", "cli.launchDevNote", ICON_DEV),
         choice("cli.launchPack", "cli.launchPackNote", ICON_PACK),
         choice("cli.launchVBA", "cli.launchVBANote", ICON_VBA),
     ];
@@ -37,6 +41,7 @@ pub(super) fn launch(con: &ConsoleState, u: Arc<dyn Ui>, explicit_lang: bool, st
             let debug = if c == LAUNCH_DEBUG { "script" } else { "" };
             start(con, u, vec![script], explicit_lang, debug, stop)
         }
+        LAUNCH_DEV => super::dev(con, u, String::new(), explicit_lang),
         LAUNCH_PACK => {
             let Some(script) = pick_script(&*u, &t!("cli.selectScriptToPack")) else { return 0 };
             launch_pack_script(con, &*u, &script)

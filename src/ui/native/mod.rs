@@ -3,6 +3,7 @@
 //! main thread, see ui::run); the types are Send + Sync only so that the
 //! UI can be handed around, and must not be used from other threads.
 
+mod browser;
 mod dialogs;
 mod loader;
 mod notify;

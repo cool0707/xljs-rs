@@ -77,6 +77,12 @@ pub struct Options {
     /// while it runs JavaScript (see watchdog.rs). None turns it off; it
     /// only works on Windows. Not used by debug_script either.
     pub stop_key: Option<watchdog::StopKey>,
+    /// Run from the development mode (xljs dev): fs.remove asks before it
+    /// deletes a folder with its contents or a second file.
+    pub dev_guard: bool,
+    /// (development mode) The file that receives the first form the script
+    /// opens, instead of showing it (the form preview); "" = off.
+    pub preview: String,
 }
 
 
@@ -187,6 +193,9 @@ pub fn run(mut o: Options) -> Result<i32> {
         meta,
         assets: Some(assets),
         debug: o.debug,
+        dev_guard: o.dev_guard,
+        preview: o.preview.clone(),
+        removed: Default::default(),
     };
     if o.debug_script {
         return debug::run(&o, env, code);
@@ -240,10 +249,7 @@ fn run_in<'js>(ctx: &Ctx<'js>, host: &Rc<Host>, code: &str) -> Result<i32> {
     if host.env.meta.is_app() {
         let open: Function = natives.get("openMain").map_err(|_| err!("engine.internalError", "openMain"))?;
         if let Err(e) = open.call::<_, Value>(()).catch(ctx) {
-            if host.exited() {
-                return Ok(host.exit_code());
-            }
-            return Err(script_error(describe_caught(ctx, e)));
+            return finish_caught(ctx, host, e);
         }
     }
     let Some(main) = main.as_function().cloned() else {
@@ -254,10 +260,7 @@ fn run_in<'js>(ctx: &Ctx<'js>, host: &Rc<Host>, code: &str) -> Result<i32> {
     let result = match result {
         Ok(v) => v,
         Err(e) => {
-            if host.exited() {
-                return Ok(host.exit_code());
-            }
-            return Err(script_error(describe_caught(ctx, e)));
+            return finish_caught(ctx, host, e);
         }
     };
     let promise = result.as_promise().cloned();
@@ -265,10 +268,7 @@ fn run_in<'js>(ctx: &Ctx<'js>, host: &Rc<Host>, code: &str) -> Result<i32> {
         host.forget_rejection(p.as_value());
     }
     if let Err(e) = host.lp.run(ctx, host).catch(ctx) {
-        if host.exited() {
-            return Ok(host.exit_code());
-        }
-        return Err(script_error(describe_caught(ctx, e)));
+        return finish_caught(ctx, host, e);
     }
     if host.exited() {
         return Ok(host.exit_code());
@@ -291,6 +291,28 @@ fn run_in<'js>(ctx: &Ctx<'js>, host: &Rc<Host>, code: &str) -> Result<i32> {
         return Err(script_error(t!("engine.unhandledRejection", describe_value(&reason))));
     }
     Ok(0)
+}
+
+/// The outcome of an exception that ended the script: the exit code after
+/// exit() (and, when the user stopped the script, where it was running, on
+/// stderr), else the error.
+fn finish_caught(ctx: &Ctx, host: &Rc<Host>, e: rquickjs::CaughtError) -> Result<i32> {
+    if !host.exited() {
+        return Err(script_error(describe_caught(ctx, e)));
+    }
+    if host.exit_code() == watchdog::STOPPED_CODE {
+        let at = stopped_at(&describe_caught(ctx, e));
+        if !at.is_empty() {
+            let _ = writeln!(host.env.stderr.lock().unwrap(), "{}\n{at}", t!("engine.stoppedAt"));
+        }
+    }
+    Ok(host.exit_code())
+}
+
+/// The frames of the stack of the exception that stopped the script (the
+/// place where it was running), "" when there are none.
+fn stopped_at(stack: &str) -> String {
+    stack.lines().filter(|l| l.trim_start().starts_with("at ")).collect::<Vec<_>>().join("\n")
 }
 
 /// Installs Error.prepareStackTrace: frames of the bundle are mapped to the

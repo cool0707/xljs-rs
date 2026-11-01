@@ -32,6 +32,7 @@ struct Flags {
     answers: Option<String>,
     lang: Option<String>,
     debug: Option<String>,
+    dev: bool,
     watchdog: Option<String>,
     stop_key: Option<String>,
     help: bool,
@@ -69,6 +70,7 @@ fn parse_flags(args: &[String]) -> Result<(Flags, Vec<String>)> {
             "ui-answers" => f.answers = Some(take(&mut i)?),
             "lang" => f.lang = Some(take(&mut i)?),
             "debug" => f.debug = Some(value.clone().unwrap_or_else(|| "script".into())),
+            "dev" => f.dev = true,
             "watchdog" => f.watchdog = Some(take(&mut i)?),
             "stop-key" => f.stop_key = Some(take(&mut i)?),
             "help" | "h" => f.help = true,
@@ -174,11 +176,46 @@ fn run(con: &ConsoleState, args: Vec<String>) -> i32 {
     if let Err(e) = set_stop(&mut Options::default(), &stop, &ui::Console::new()) {
         return con.fail(None, &e);
     }
+    if flags.dev || rest.first().is_some_and(|a| a == "dev") {
+        let args = if flags.dev { &rest[..] } else { &rest[1..] };
+        if args.len() > 1 {
+            eprintln!("{}", t!("cli.usageDev"));
+            return 2;
+        }
+        return dev(con, u, args.first().cloned().unwrap_or_default(), explicit_lang);
+    }
     if rest.is_empty() {
         // Double-clicked without a script: ask what to do.
         return launch::launch(con, u, explicit_lang, &stop);
     }
     start(con, u, rest, explicit_lang, &debug, &stop)
+}
+
+/// Opens the development mode (xljs dev [script]) with the script, a
+/// folder to choose one in, or nothing ("").
+fn dev(con: &ConsoleState, u: Arc<dyn Ui>, path: String, explicit_lang: bool) -> i32 {
+    let mut run_args = Vec::new();
+    if explicit_lang || !env("XLJS_LANG").is_empty() {
+        run_args.push(format!("--lang={}", i18n::lang()));
+    }
+    let o = crate::dev::DevOptions {
+        path,
+        exe: std::env::current_exe().unwrap_or_else(|_| "xljs".into()),
+        run_args,
+        settings: crate::dev::default_settings(),
+    };
+    match ui::run(u.clone(), move |su| crate::dev::run(su, o)) {
+        Ok(c) => c,
+        Err(e) => con.fail(Some(&*u), &e),
+    }
+}
+
+/// Applies what the development mode asks of a run of a script it started
+/// (see dev::runner): fs.remove asks before deleting much, and the form
+/// preview.
+fn set_dev(o: &mut Options) {
+    o.dev_guard = !env(crate::dev::runner::DEV_ENV).is_empty();
+    o.preview = env(crate::dev::runner::PREVIEW_ENV);
 }
 
 /// Counts Ctrl+C: the first one only cancels while a progress indicator is
@@ -213,6 +250,7 @@ fn start(con: &ConsoleState, u: Arc<dyn Ui>, rest: Vec<String>, explicit_lang: b
     if let Err(e) = set_stop(&mut o, stop, &*u) {
         return con.fail(Some(&*u), &e);
     }
+    set_dev(&mut o);
     run_script(con, u, o)
 }
 

@@ -603,6 +603,82 @@ fn watchdog_stops_endless_loops() {
 }
 
 #[test]
+fn watchdog_tells_where_it_stopped() {
+    let _l = lock_lang("ja");
+    let src = "let n = 0;\nfunction spin() {\n  while (true) { n++; }\n}\nspin();\n";
+    let r = run_watched(src, "[true]", Duration::from_millis(200));
+    assert_eq!(r.code, watchdog::STOPPED_CODE, "{:?}", r.stderr);
+    assert!(r.stderr.contains("中止した場所:\n    at spin (loop.js:3:"), "{:?}", r.stderr);
+}
+
+/// Runs src like the development mode's runs (dev_guard, preview) with the
+/// mock answers.
+fn run_dev(src: &str, answers: &str, preview: &str) -> Res {
+    let (o, e) = (SharedBuf::default(), SharedBuf::default());
+    let m = Mock::from_json(answers, Some(e.sink())).unwrap();
+    let r = run(Options {
+        script_path: write_script("dev.js", src),
+        ui: Some(Arc::new(m)),
+        stdout: Some(out(&o)),
+        stderr: Some(out(&e)),
+        dev_guard: true,
+        preview: preview.to_string(),
+        ..Default::default()
+    });
+    let (code, err) = match r {
+        Ok(c) => (c, None),
+        Err(e) => (1, Some(e)),
+    };
+    Res { code, err, stdout: o.text(), stderr: e.text() }
+}
+
+#[test]
+fn dev_guard_asks_before_deleting_much() {
+    let _l = lock_lang("ja");
+    let d = crate::testutil::tempdir();
+    for f in ["a.txt", "b.txt", "c.txt", "sub/x.txt"] {
+        let p = d.join(f);
+        std::fs::create_dir_all(p.parent().unwrap()).unwrap();
+        std::fs::write(&p, "x").unwrap();
+    }
+    std::fs::create_dir_all(d.join("empty")).unwrap();
+    let dir = d.to_string_lossy().replace('\\', "/");
+    // One file and an empty folder: no question. The second file: asked
+    // once. A folder with files: asked.
+    let src = format!(
+        r#"const d = "{dir}";
+        fs.remove(d + "/a.txt");
+        fs.remove(d + "/empty", {{ recursive: true }});
+        fs.remove(d + "/b.txt");
+        fs.remove(d + "/c.txt");
+        fs.remove(d + "/sub", {{ recursive: true }});
+        console.log("done");"#
+    );
+    let r = run_dev(&src, r#"{"confirm": [true, false]}"#, "");
+    assert_eq!(r.stderr.matches("confirm(").count(), 2, "{:?}", r.stderr);
+    assert!(r.stderr.contains("複数のファイルを削除") && r.stderr.contains("中のファイル・フォルダ 1 個ごと"), "{:?}", r.stderr);
+    assert!(r.err_text().contains("削除を取りやめました"), "{}", r.err_text());
+    assert!(!d.join("c.txt").exists() && d.join("sub/x.txt").exists() && !r.stdout.contains("done"));
+}
+
+#[test]
+fn dev_form_preview() {
+    let _l = lock_lang("ja");
+    let f = crate::testutil::tempdir().join("form.json");
+    let src = r#"
+        console.log("before");
+        await ui.form({ title: "集計", fields: [{ name: "file", label: "ファイル", type: "file", required: true }], onSubmit() { console.log("ran") } });
+        console.log("after");"#;
+    let r = run_dev(src, "{}", &f.to_string_lossy());
+    assert_eq!(r.code, 0, "{} {:?}", r.err_text(), r.stderr);
+    assert!(r.stdout.contains("before") && !r.stdout.contains("ran") && !r.stdout.contains("after"), "{:?}", r.stdout);
+    let v: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(&f).unwrap()).unwrap();
+    assert_eq!(v["type"], "init");
+    assert_eq!(v["fields"][0]["label"], "ファイル");
+    assert_eq!(v["fields"][0]["required"], true);
+}
+
+#[test]
 fn watchdog_ignores_waiting_scripts() {
     let _l = lock_lang("ja");
     // Busy for less than the limit at a time, waiting in between: the

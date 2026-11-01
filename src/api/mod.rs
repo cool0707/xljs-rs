@@ -59,6 +59,11 @@ pub struct Env {
     pub meta: Meta,
     pub assets: Option<Arc<dyn AssetFs>>,
     pub debug: bool,
+    /// See engine::Options::dev_guard and preview. removed counts the
+    /// files fs.remove deleted (dev_guard asks before the second one).
+    pub dev_guard: bool,
+    pub preview: String,
+    pub removed: std::sync::atomic::AtomicU32,
 }
 
 impl Env {
@@ -364,6 +369,14 @@ fn install_core(n: &N) {
     });
     n.set("stderr", |h, a| {
         write_out(&h.env.stderr, &a.str(0));
+        a.undefined()
+    });
+    // The form preview of the development mode (Env::preview): the path
+    // ("" = off) and the writing of the form's first message.
+    n.val("devPreview", n.host.env.preview.clone());
+    n.set("devPreviewWrite", |h, a| {
+        let p = h.env.preview.clone();
+        std::fs::write(&p, a.str(0)).map_err(|e| a.throw(&Error::path("open", p.clone(), e)))?;
         a.undefined()
     });
     n.set("exit", |h, a| {

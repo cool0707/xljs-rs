@@ -1,18 +1,19 @@
 #!/usr/bin/env python3
-"""Draws the icons of the start screen choices (cmd/xljs/icons/*.ico):
+"""Draws the icons of the start screen choices (src/cli/icons/*.ico):
 a colored circle with a white symbol, at the sizes Windows asks for.
 
-usage: python3 tools/make_launch_icons.py
+usage: python3 tools/make_launch_icons.py [name...]   (default: all)
 """
 import math
 import os
+import sys
 
 from PIL import Image, ImageDraw
 
 SIZES = [16, 20, 24, 32, 40, 48, 64]
 S = 256  # drawing size; each icon size is scaled down from it
 WHITE = (255, 255, 255, 255)
-OUT = os.path.join(os.path.dirname(__file__), "..", "cmd", "xljs", "icons")
+OUT = os.path.join(os.path.dirname(__file__), "..", "src", "cli", "icons")
 
 
 def base(color):
@@ -61,9 +62,24 @@ def vba():
     return im
 
 
+def dev():
+    im, d = base((0, 137, 150, 255))
+    # a speech bubble (the AI chat) with lines of code in it
+    d.rounded_rectangle((52, 62, 204, 170), radius=26, fill=WHITE)
+    d.polygon([(84, 160), (76, 206), (124, 166)], fill=WHITE)
+    c = (0, 137, 150, 255)
+    for y, x0, x1 in ((92, 78, 150), (116, 98, 178), (140, 98, 140)):
+        d.line([(x0, y), (x1, y)], fill=c, width=12)
+    return im
+
+
 def main():
     os.makedirs(OUT, exist_ok=True)
-    for name, draw in (("run", run), ("debug", debug), ("pack", pack), ("vba", vba)):
+    all_icons = (("run", run), ("debug", debug), ("dev", dev), ("pack", pack), ("vba", vba))
+    names = sys.argv[1:]
+    for name, draw in all_icons:
+        if names and name not in names:
+            continue
         im = draw()
         frames = [im.resize((s, s), Image.LANCZOS) for s in SIZES]
         path = os.path.join(OUT, name + ".ico")

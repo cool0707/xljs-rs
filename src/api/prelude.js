@@ -1979,6 +1979,7 @@
       accent: accentColor(options.accent),
       key, tabs, tabIcons, groups, buttons,
     };
+    if (native.devPreview) return formPreview(o, fields, wire);
     return native.supportsWindows ? formWindow(o, fields, wire, options) : formPrompt(o, fields, wire, options);
   }
 
@@ -2140,6 +2141,32 @@
   /** Visible rows of a table field: height, or up to 8 (at least 3). */
   const tableLines = (f) => f.rows || Math.min(8, Math.max(3, f.table.data.length));
 
+  /** The form page's first message: the form and its fields. */
+  function formInit(o, fields, wire) {
+    return {
+      type: "init", description: o.description, texts: formTexts(),
+      submit: o.submit, submitIcon: o.submitIcon, accent: o.accent, tabs: o.tabs, tabIcons: o.tabIcons,
+      groups: o.groups,
+      noSubmit: o.noSubmit, buttons: o.buttons.map((b) => b.label), buttonIcons: o.buttons.map((b) => b.icon),
+      buttonTooltips: o.buttons.map((b) => b.tooltip),
+      fields: fields.map((f) => ({
+        name: f.name, label: f.label, icon: f.icon, type: f.type, options: f.options, required: f.required,
+        placeholder: f.placeholder, help: f.help, tooltip: f.tooltip, change: !!f.onChange,
+        accept: f.accept, min: f.min, max: f.max, step: f.step,
+        rows: f.type === "table" ? tableLines(f) : f.rows, value: wire[f.name], tab: f.tab, group: f.group,
+        table: f.table ? Object.assign({ select: f.table.select, editable: editWire(f.table) || undefined }, tableWire(f.table)) : undefined,
+        chart: f.chart ? Object.assign({ height: chartHeight(f) }, chartInit(f.chart)) : undefined,
+      })),
+      lang: native.lang, chartTexts: fields.some((f) => f.chart) ? chartTexts() : undefined,
+    };
+  }
+
+  /** The development mode's form preview: the form page's first message goes to a file instead of a window, and the script ends. */
+  function formPreview(o, fields, wire) {
+    native.devPreviewWrite(JSON.stringify(formInit(o, fields, wire)));
+    return native.exit(0);
+  }
+
   // Native UI: the form page. Resolves with the last submitted values once the window is closed.
   function formWindow(o, fields, wire, options) {
     const byName = new Map(fields.map((f) => [f.name, f]));
@@ -2163,22 +2190,7 @@
       async function handle(m, files) {
         switch (m.type) {
           case "ready":
-            page.send({
-              type: "init", description: o.description, texts: formTexts(),
-              submit: o.submit, submitIcon: o.submitIcon, accent: o.accent, tabs: o.tabs, tabIcons: o.tabIcons,
-              groups: o.groups,
-              noSubmit: o.noSubmit, buttons: o.buttons.map((b) => b.label), buttonIcons: o.buttons.map((b) => b.icon),
-              buttonTooltips: o.buttons.map((b) => b.tooltip),
-              fields: fields.map((f) => ({
-                name: f.name, label: f.label, icon: f.icon, type: f.type, options: f.options, required: f.required,
-                placeholder: f.placeholder, help: f.help, tooltip: f.tooltip, change: !!f.onChange,
-                accept: f.accept, min: f.min, max: f.max, step: f.step,
-                rows: f.type === "table" ? tableLines(f) : f.rows, value: wire[f.name], tab: f.tab, group: f.group,
-                table: f.table ? Object.assign({ select: f.table.select, editable: editWire(f.table) || undefined }, tableWire(f.table)) : undefined,
-                chart: f.chart ? Object.assign({ height: chartHeight(f) }, chartInit(f.chart)) : undefined,
-              })),
-              lang: native.lang, chartTexts: fields.some((f) => f.chart) ? chartTexts() : undefined,
-            });
+            page.send(formInit(o, fields, wire));
             for (const f of fields) {
               if (f.table && f.table.edit) page.send({ type: "cellErrors", field: f.name, errors: await tableErrors(f.table) });
             }
