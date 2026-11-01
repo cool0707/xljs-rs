@@ -458,9 +458,22 @@
 
   // ---------------------------------------------------------------- handles
 
+  /**
+   * Expands %NAME% environment variables (Windows style, on every platform; names are
+   * case-insensitive on Windows). Undefined variables are left as they are, like cmd.exe.
+   */
+  function expandEnv(s) {
+    s = String(s);
+    if (!s.includes("%")) return s;
+    return s.replace(/%([A-Za-z_][\w().\-]*)%/g, (m, name) => {
+      const v = native.getenv(name);
+      return v === null || v === undefined ? m : v;
+    });
+  }
+
   /** Converts a path-like value (string, handle, File with path) to a path string. */
   function toPath(x, what = "path") {
-    if (typeof x === "string") return x;
+    if (typeof x === "string") return expandEnv(x);
     if (x instanceof FileSystemHandle) return x.path;
     if (x instanceof File && x.path) return x.path;
     if (x && typeof x.path === "string") return x.path;
@@ -772,6 +785,7 @@
     normalize: (p) => native.pathNormalize(toPath(p)),
     isAbsolute: (p) => native.pathIsAbsolute(toPath(p)),
     relative: (from, to) => native.pathRelative(toPath(from), toPath(to)),
+    expandEnv: (s) => expandEnv(s),
   };
   defineGlobal("path", pathObj);
 
@@ -821,7 +835,7 @@
     if (startIn instanceof FileSystemFileHandle) return native.pathDirname(startIn.path);
     if (startIn instanceof FileSystemDirectoryHandle) return startIn.path;
     const s = String(startIn);
-    return native.knownFolder(s) || s;
+    return native.knownFolder(s) || expandEnv(s);
   }
   function pickerOptions(o = {}) {
     return {
