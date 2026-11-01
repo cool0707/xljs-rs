@@ -130,4 +130,13 @@ equal(path.basename("a/b.xlsx", ".xlsx"), "b");
 equal(path.join(dir, "x.txt"), path.resolve("data", "x.txt"));
 throws(() => path.join({}), /パス/);
 
+// %NAME% environment variables are expanded in path arguments.
+const homeVar = xljs.env("USERPROFILE") !== null ? "USERPROFILE" : "HOME";
+const home = xljs.env(homeVar);
+equal(path.expandEnv(`%${homeVar}%/x`), `${home}/x`);
+equal(path.expandEnv("%XLJS_NO_SUCH_VAR%/100%"), "%XLJS_NO_SUCH_VAR%/100%");
+equal(path.expandEnv("no vars"), "no vars");
+ok(fs.isDirectory(`%${homeVar}%`));
+equal(path.join(`%${homeVar}%`, "a"), path.join(home, "a"));
+
 console.log("fs ok");

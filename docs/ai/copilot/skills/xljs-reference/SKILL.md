@@ -37,6 +37,7 @@ description: xljs（Excel・CSV・JSON を JavaScript で処理する Windows �
 | `xljs.args` | 引数の配列（exe にドロップしたファイルのパスなど） |
 | `xljs.script` / `xljs.scriptDir` | スクリプトのパス / フォルダ |
 | `xljs.env(name)` | 環境変数（無ければ `null`）。例 `xljs.env("USERPROFILE")` |
+| `path.expandEnv(s)` | `%NAME%` を環境変数で置き換えた文字列。パスを受け取る API は自動で展開する（`fs.readText("%USERPROFILE%\\Desktop\\a.txt")`） |
 | `xljs.title` | ダイアログのタイトル（代入で変更可） |
 | `exit(code?)` | スクリプトを終了する |
 

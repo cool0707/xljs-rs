@@ -325,7 +325,8 @@ for (const f of d.walk({ glob: "*.xlsx", exclude: ["old"] })) {
 - `walk()` `list()` `fs.list()` `fs.glob()` `entries()` / `values()` は、既定で隠しファイル・システムファイル（`desktop.ini`、`Thumbs.db` など）、`.` で始まる名前、Office のロックファイル（`~$集計.xlsx`）を除きます（隠しフォルダは中も見ません）。含めるときは `{ hidden: true }` を渡します（`fs.list(p, { hidden: true })`、`d.list({ hidden: true })`）。
 - ハンドルの独自拡張: `path`, `relativePath`, `exists()`, `readText()`, `writeText()`, `readBytes()` など
 - `fs`: `exists` `stat` `readText` `writeText` `appendText` `readBytes` `writeBytes` `readJSON` `writeJSON` `list` `walk` `glob` `mkdir` `remove` `rename` `copy` `cwd` `chdir`
-- `path`: `join` `resolve` `dirname` `basename` `extname` `relative` `normalize` `isAbsolute`
+- `path`: `join` `resolve` `dirname` `basename` `extname` `relative` `normalize` `isAbsolute` `expandEnv`
+- パスを受け取る API（`fs.*`・`path.*`・`workbooks.open`・`save()`・ピッカーの `startIn`・フォームの `file`/`folder` 項目など）は、文字列中の `%USERPROFILE%` のような環境変数を展開します（`fs.readText("%USERPROFILE%\\Desktop\\a.txt")`）。未定義の変数はそのまま残ります。展開した文字列だけ欲しいときは `path.expandEnv(s)`
 - パスを受け取る API には文字列・ハンドル・`File`（ディスク上のもの）のどれでも渡せます。
 - 相対パスはカレントフォルダが基準です。エクスプローラーから起動した場合（ダブルクリック、exe やスクリプトへのドロップ）はスクリプト（埋め込み exe なら exe）のあるフォルダがカレントフォルダになります。コマンドプロンプトから起動した場合はそのままです。
 - `writeText` / `appendText` の既定は UTF-8 で、`.csv` / `.tsv` のファイルだけは BOM 付き（Excel で文字化けしない）にします。

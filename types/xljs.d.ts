@@ -939,6 +939,7 @@ declare global {
   }
   var File: { prototype: File; new (parts: (string | ArrayBuffer | ArrayBufferView | Blob)[], name: string, options?: { type?: string; lastModified?: number }): File };
 
+  /** 文字列のパスは %USERPROFILE% のような環境変数を展開して使う */
   type PathLike = string | FileSystemHandle | File;
 
   /**
@@ -1026,6 +1027,11 @@ declare global {
     normalize(p: PathLike): string;
     isAbsolute(p: PathLike): boolean;
     relative(from: PathLike, to: PathLike): string;
+    /**
+     * 文字列中の %NAME% を環境変数の値に置き換える（未定義の変数はそのまま）。
+     * パスを受け取る API はすべて自動で展開するので、表示用などに使う。例 path.expandEnv("%USERPROFILE%\\Desktop")
+     */
+    expandEnv(s: string): string;
   }
   const path: Path;
 
