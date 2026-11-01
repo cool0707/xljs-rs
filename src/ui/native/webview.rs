@@ -57,6 +57,8 @@ struct WinState {
     icons: [HICON; 2], // big, small (from o.icon; destroyed with the window)
     closed: RefCell<bool>,
     active: Cell<bool>,
+    /// The browser pane (WindowOptions::browser).
+    browser: RefCell<Option<Rc<super::browser::Browser>>>,
 }
 
 thread_local! {
@@ -95,6 +97,13 @@ impl Window for WebWindow {
             unsafe {
                 let _ = DestroyWindow(self.hwnd());
             }
+        }
+    }
+
+    fn browser(&self, cmd: crate::ui::BrowserCommand) {
+        let b = state(self.hwnd()).and_then(|st| st.browser.borrow().clone());
+        if let Some(b) = b {
+            b.command(cmd);
         }
     }
 }
@@ -159,13 +168,17 @@ fn open_hwnd(o: WindowOptions) -> Result<HWND> {
         // The page's size is below the bar.
         height += TITLE_BAR_HEIGHT;
     }
-    let style = if o.hidden {
+    let mut style = if o.hidden {
         WS_POPUP
     } else if o.fixed_size {
         WS_OVERLAPPEDWINDOW & !(WS_THICKFRAME | WS_MAXIMIZEBOX)
     } else {
         WS_OVERLAPPEDWINDOW
     };
+    if o.browser.is_some() {
+        // The page's WebView must not paint over the browser pane.
+        style |= WS_CLIPCHILDREN;
+    }
     // A hidden window is shown but nearly transparent, so that the page
     // renders (requestAnimationFrame) as in a visible window.
     let ex_style = if o.hidden { WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_LAYERED | WS_EX_TRANSPARENT } else { Default::default() };
@@ -221,6 +234,7 @@ fn open_hwnd(o: WindowOptions) -> Result<HWND> {
             icons,
             closed: RefCell::new(false),
             active: Cell::new(true),
+            browser: RefCell::new(None),
         });
         STATES.with(|s| s.borrow_mut().insert(hwnd.0 as isize, st.clone()));
         if st.o.custom_title_bar {
@@ -395,7 +409,7 @@ fn data_folder() -> String {
     std::path::Path::new(&base).join("xljs").join("WebView2").to_string_lossy().into_owned()
 }
 
-fn take_pwstr(p: PWSTR) -> String {
+pub(super) fn take_pwstr(p: PWSTR) -> String {
     if p.is_null() {
         return String::new();
     }
@@ -556,6 +570,12 @@ fn embed(hwnd: HWND, st: &Rc<WinState>) -> Result<()> {
         }
         if st.o.debug && st.o.dev_tools {
             let _ = core.OpenDevToolsWindow();
+        }
+        if let Some(bo) = &st.o.browser {
+            match super::browser::create(hwnd, &env, bo) {
+                Ok(b) => *st.browser.borrow_mut() = Some(Rc::new(b)),
+                Err(e) => (bo.on_event)(crate::ui::BrowserEvent::Failed(e)),
+            }
         }
     }
     Ok(())
@@ -763,6 +783,10 @@ unsafe extern "system" fn wnd_proc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam:
                         let _ = c.NotifyParentWindowPositionChanged();
                     }
                 }
+                let b = st.browser.borrow().clone();
+                if let Some(b) = b {
+                    b.moved();
+                }
             }
             WM_ACTIVATE => {
                 st.active.set(wparam.0 & 0xFFFF != 0);
@@ -787,6 +811,10 @@ fn destroyed(hwnd: HWND, st: &Rc<WinState>) {
     }
     // Close re-enters wnd_proc (WebView2 destroys its child windows): no
     // borrow may be held across it.
+    let browser = st.browser.borrow_mut().take();
+    if let Some(b) = browser {
+        b.close();
+    }
     let controller = st.controller.borrow_mut().take();
     if let Some(c) = controller {
         unsafe {

@@ -118,6 +118,52 @@ pub struct WindowOptions {
     /// taskbar button, never activated, see-through and click-through. The
     /// page still renders as in a shown window.
     pub hidden: bool,
+    /// A second WebView over a part of the page that shows web sites (the
+    /// AI chat of the development mode), driven by Window::browser.
+    pub browser: Option<BrowserOptions>,
+}
+
+/// The web browser pane of a window (WindowOptions::browser).
+#[derive(Clone)]
+pub struct BrowserOptions {
+    /// The folder downloads are saved to.
+    pub downloads: String,
+    /// The extensions (without the dot, lower case) of downloads that are
+    /// saved without the browser's check for dangerous file types (which
+    /// asks before keeping a .js file). Only for files that are read as
+    /// text, never run.
+    pub trusted_extensions: Vec<String>,
+    /// Receives what happens in the pane; called on the UI thread, must not
+    /// block.
+    pub on_event: OnBrowser,
+}
+
+pub type OnBrowser = Arc<dyn Fn(BrowserEvent) + Send + Sync>;
+
+/// What a window's browser pane is told to do (Window::browser).
+#[derive(Debug, Clone, PartialEq)]
+pub enum BrowserCommand {
+    /// Shows the pane over a rectangle of the page, in CSS pixels; scale
+    /// is the page's devicePixelRatio.
+    Show { x: f64, y: f64, width: f64, height: f64, scale: f64 },
+    Hide,
+    Navigate(String),
+    Back,
+    Forward,
+    Reload,
+}
+
+/// What happens in a window's browser pane.
+#[derive(Debug, Clone, PartialEq)]
+pub enum BrowserEvent {
+    /// The pane shows another page.
+    Url(String),
+    /// A download has finished: where it was saved and the name the site
+    /// gave it.
+    Downloaded { path: String, name: String },
+    DownloadFailed { name: String },
+    /// The pane cannot be shown (the error).
+    Failed(String),
 }
 
 /// A document to turn into a PDF (Ui::print_pdf).
@@ -148,6 +194,8 @@ pub trait Window: Send + Sync {
     fn post(&self, msg: String);
     /// Closes the window. It is safe to call more than once.
     fn close(&self);
+    /// Drives the browser pane (WindowOptions::browser); nothing without one.
+    fn browser(&self, _cmd: BrowserCommand) {}
 }
 
 /// The set of interactions available to scripts. Implementations are

@@ -24,8 +24,12 @@ fn launch_screen() {
     let (code, log) = launch_with(serde_json::json!({"choose": [0], "showOpenFilePicker": [[s]]}));
     assert!(code == 0 && log.contains("こんにちは"), "run: {code}\n{log}");
 
+    // The development mode needs WebView2 windows, which the mock has not.
+    let (code, log) = launch_with(serde_json::json!({"choose": [2]}));
+    assert_eq!(code, 1, "dev\n{log}");
+
     let out = dir.join("hello.exe");
-    let (code, log) = launch_with(serde_json::json!({"choose": [2], "showOpenFilePicker": [[s]], "showSaveFilePicker": [out.to_string_lossy()]}));
+    let (code, log) = launch_with(serde_json::json!({"choose": [3], "showOpenFilePicker": [[s]], "showSaveFilePicker": [out.to_string_lossy()]}));
     assert_eq!(code, 0, "pack\n{log}");
     let p = pack::read(&out).unwrap().unwrap();
     assert_eq!(p.name, "hello.js");
@@ -33,7 +37,7 @@ fn launch_screen() {
 
     let book = dir.join("売上.xlsm");
     std::fs::copy(repo_path("testdata/scripts/macro.xlsm"), &book).unwrap();
-    let (code, log) = launch_with(serde_json::json!({"choose": [3], "showOpenFilePicker": [[book.to_string_lossy()]]}));
+    let (code, log) = launch_with(serde_json::json!({"choose": [4], "showOpenFilePicker": [[book.to_string_lossy()]]}));
     assert_eq!(code, 0, "vba\n{log}");
     assert!(dir.join("売上_VBA.txt").exists());
 }
@@ -69,6 +73,8 @@ fn flags() {
     assert_eq!(f.debug.as_deref(), Some("script"));
     assert_eq!(rest, vec!["s.js", "--debug", "x"]);
     assert!(parse_flags(&["--nope".to_string()]).is_err());
+    let (f, rest) = parse_flags(&["--dev".to_string(), "a.js".to_string()]).unwrap();
+    assert!(f.dev && rest == vec!["a.js".to_string()]);
     let (out, rest) = split_out(&["a.js".into(), "-o".into(), "b.exe".into()]).unwrap();
     assert_eq!((out.as_deref(), rest), (Some("b.exe"), vec!["a.js".to_string()]));
 }

@@ -13,6 +13,35 @@ fn io_err(op: &str, path: &str, e: std::io::Error) -> Error {
     Error::path(op, path, e)
 }
 
+/// The development mode's check before fs.remove (Env::dev_guard): it asks
+/// before deleting a folder with its contents and before the second file
+/// of the run (a script deleting many files by mistake). An error when the
+/// user declines.
+fn guard_remove(h: &super::Host, p: &str, recursive: bool) -> crate::Result<()> {
+    use std::sync::atomic::Ordering;
+    let Ok(m) = std::fs::symlink_metadata(p) else { return Ok(()) };
+    let abs = std::path::absolute(p).map(|a| a.to_string_lossy().into_owned()).unwrap_or_else(|_| p.to_string());
+    let message = if m.is_dir() {
+        if !recursive {
+            return Ok(());
+        }
+        let n = walkdir::WalkDir::new(p).min_depth(1).into_iter().take(100_000).count();
+        if n == 0 {
+            return Ok(());
+        }
+        crate::t!("dev.confirmRemoveFolder", abs, n)
+    } else {
+        if h.env.removed.fetch_add(1, Ordering::SeqCst) != 1 {
+            return Ok(());
+        }
+        crate::t!("dev.confirmRemoveFiles", abs)
+    };
+    if h.env.ui.confirm(&h.env.title, &message) {
+        return Ok(());
+    }
+    Err(err!("dev.removeDeclined", abs))
+}
+
 pub(super) fn install(n: &N) {
     n.set("fsStat", |_, a| {
         let p = a.str(0);
@@ -96,8 +125,11 @@ pub(super) fn install(n: &N) {
         std::fs::create_dir_all(&p).map_err(|e| a.throw(&io_err("mkdir", &p, e)))?;
         a.undefined()
     });
-    n.set("fsRemove", |_, a| {
+    n.set("fsRemove", |h, a| {
         let p = a.str(0);
+        if h.env.dev_guard {
+            guard_remove(h, &p, a.bool(1)).map_err(|e| a.throw(&e))?;
+        }
         let r = if a.bool(1) {
             match std::fs::symlink_metadata(&p) {
                 Ok(m) if m.is_dir() => std::fs::remove_dir_all(&p),
