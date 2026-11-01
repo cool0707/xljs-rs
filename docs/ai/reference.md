@@ -230,8 +230,9 @@ doc.insert(2, "差し込み.pdf", { pages: [1] });          // 2 ページ目の
 doc.insertBlankPage(1, { paper: "A4" });                // 白紙のページ（表紙）
 doc.removePages("5-6,-1");                              // 削除（-1 は最後のページ）
 doc.rotatePages(3, 90);                                 // 時計回りに回転
-doc.addText(1, "提出用", { x: 20, y: 15, size: 14, color: "red" });
-doc.addText("all", (p) => `${p.number} / ${p.count}`, { bottom: 10, align: "center", size: 9 }); // ページ番号
+doc.addText("all", (p) => `${p.number} / ${p.count}`, { position: "bottom-center", size: 9 }); // ページ番号
+doc.addText("all", "資料番号 A-001", { position: "top-right", size: 9 }); // 右上に資料番号
+doc.addText(1, "提出用", { x: 20, y: 15, size: 14, color: "red" });     // 位置を mm で
 doc.save("報告書_提出用.pdf");                          // 省略で上書き
 doc.close();
 const p = pdf.merge(["a.pdf", "b.pdf", "c.pdf"], "まとめ.pdf"); // 結合して保存（保存先を省くと文書を返す）
@@ -240,7 +241,8 @@ const p = pdf.merge(["a.pdf", "b.pdf", "c.pdf"], "まとめ.pdf"); // 結合し�
 - ページの指定: 番号・番号の配列・`"1-3,5"`・`"3-"`（3 ページ目から最後まで）・`"all"`。負の番号は後ろから。
 - `doc.pageCount`、`doc.pages`（`[{ number, width, height, rotation }]`。表示したときの大きさ（mm）と回転）。
 - `insert` / `append` の取り込み元は PDF ファイル（パス・ハンドル・`File`・`Blob`・`ArrayBuffer`）か別の `PdfDocument`。自分自身を渡すとページの複製になる。しおり（アウトライン）とフォームの定義は取り込まない。
-- `addText` のオプション: `x` `y`（左上からの位置。`y` は文字の上端）、`right` `bottom`（右端・下端からの位置）、`size`（既定 11）、`color`（`"#rrggbb"` か色名）、`opacity`（0〜1）、`align`（`"left"` `"center"` `"right"`。`center` は `x` が中央、`x` を省くとページの中央）、`lineHeight`（既定 1.3）、`rotate`（度、反時計回り）、`font`（`"游ゴシック"` `"メイリオ"` `"ＭＳ 明朝"` などの名前かフォントファイルのパス。配列なら文字ごとに前から探す）。`"\n"` で改行。回転したページでも見た目の向きで置く。
+- `addText` の置き場所は `position` が簡単: `"top-left"` `"top-center"` `"top-right"` `"center"` `"bottom-left"` `"bottom-center"` `"bottom-right"`（`"右下"` `"下中央"` なども可）。ページの端から `margin`（mm、既定 10。`{ x, y }` で別々に）だけ内側に置き、複数行は寄せた側にそろう。
+- ほかのオプション: `x` `y`（左上からの位置。`y` は文字の上端）、`right` `bottom`（右端・下端からの位置。指定した向きは `position` より優先）、`size`（既定 11）、`color`（`"#rrggbb"` か色名）、`opacity`（0〜1）、`align`（行の揃え）、`lineHeight`（既定 1.3）、`rotate`（度、反時計回り）、`font`（`"游ゴシック"` `"メイリオ"` `"ＭＳ 明朝"` などの名前かフォントファイルのパス。配列なら文字ごとに前から探す）。`"\n"` で改行。回転したページでも見た目の向きで置く。
 - 文字はフォントの使った字だけを埋め込むので、検索・コピーできる。既定のフォントは游ゴシック（Windows）。
 - 保存した PDF は暗号化しない（パスワードは外れる）。電子署名は無効になる。
 

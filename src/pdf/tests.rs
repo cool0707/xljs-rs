@@ -140,7 +140,7 @@ fn adds_text() {
     let mut d = three();
     let o = TextOptions { font: vec![f.clone()], x: Some(20.0), y: Some(20.0), ..Default::default() };
     d.add_text(0, "Hello", &o).unwrap();
-    let o = TextOptions { font: vec![f], bottom: Some(10.0), align: Align::Center, color: "#336699".into(), opacity: 0.5, rotate: 45.0, ..Default::default() };
+    let o = TextOptions { font: vec![f], bottom: Some(10.0), align: Some(Align::Center), color: "#336699".into(), opacity: 0.5, rotate: 45.0, ..Default::default() };
     d.add_text(2, "World\nAgain", &o).unwrap();
     let doc = reload(&mut d);
     let t = texts(&doc);
@@ -210,4 +210,58 @@ fn colors() {
     assert_eq!(parse_color("Gray").map(|c| (c[0] * 255.0).round()), Some(128.0));
     assert_eq!(parse_color("#ggg"), None);
     assert_eq!(parse_color("teal"), None);
+}
+
+/// The x and y of each Tm in the content of the page at index i.
+fn text_positions(doc: &Document, i: usize) -> Vec<(f64, f64)> {
+    let page = doc.get_pages().into_values().nth(i).unwrap();
+    let c = String::from_utf8_lossy(&doc.get_page_content(page)).into_owned();
+    let re = regex::Regex::new(r"1 0 0 1 (\S+) (\S+) Tm").unwrap();
+    re.captures_iter(&c).map(|m| (m[1].parse().unwrap(), m[2].parse().unwrap())).collect()
+}
+
+#[test]
+fn places_text_by_position() {
+    let _g = lock_lang("en");
+    let Some(f) = latin_font() else {
+        eprintln!("no font: skipped");
+        return;
+    };
+    let (w, h) = (595.276, 841.89);
+    let mut d = PdfDoc::create();
+    let positions = ["top-left", "top-center", "top-right", "center", "bottom-left", "bottom-center", "bottom-right"];
+    for (i, p) in positions.iter().enumerate() {
+        d.insert_blank(i, w, h);
+        let o = TextOptions { font: vec![f.clone()], position: Some(p.to_string()), ..Default::default() };
+        d.add_text(i, "No. 12", &o).unwrap();
+    }
+    // Margins of 20 mm across and 5 mm down; x and y win over the position.
+    d.insert_blank(7, w, h);
+    let o = TextOptions { font: vec![f.clone()], position: Some("bottom-right".into()), margin: [20.0, 5.0], ..Default::default() };
+    d.add_text(7, "No. 12", &o).unwrap();
+    let o = TextOptions { font: vec![f.clone()], position: Some("bottom-right".into()), x: Some(50.0), ..Default::default() };
+    d.add_text(7, "No. 12", &o).unwrap();
+    let doc = reload(&mut d);
+    let p: Vec<(f64, f64)> = (0..7).map(|i| text_positions(&doc, i)[0]).collect();
+    let m = 10.0 * MM;
+    let width = w - m - p[2].0;
+    let near = |a: f64, b: f64| (a - b).abs() < 0.01;
+    assert!(near(p[0].0, m) && near(p[4].0, m), "{p:?}");
+    assert!(near(p[1].0, (w - width) / 2.0) && near(p[5].0, p[1].0) && near(p[3].0, p[1].0), "{p:?}");
+    assert!(near(p[6].0, p[2].0), "{p:?}");
+    assert!(near(p[0].1, p[1].1) && near(p[0].1, p[2].1) && p[0].1 < h - m && p[0].1 > h - m - 11.0, "{p:?}");
+    assert!(near(p[4].1, p[5].1) && near(p[4].1, p[6].1) && p[4].1 > m && p[4].1 < m + 5.0, "{p:?}");
+    assert!(p[3].1 > h / 2.0 - 11.0 && p[3].1 < h / 2.0, "{p:?}");
+    let q = text_positions(&doc, 7);
+    assert!(near(q[0].0, w - 20.0 * MM - width) && near(q[0].1 - p[4].1, 5.0 * MM - m), "{q:?}");
+    assert!(near(q[1].0, 50.0 * MM - width) && near(q[1].1, p[4].1), "{q:?}");
+    // Lines are aligned like the position (right), the block placed as a whole.
+    let mut d = PdfDoc::create();
+    d.insert_blank(0, w, h);
+    let o = TextOptions { font: vec![f], position: Some("bottom-right".into()), ..Default::default() };
+    d.add_text(0, "No. 12\n1", &o).unwrap();
+    let doc = reload(&mut d);
+    let r = text_positions(&doc, 0);
+    assert!(near(r[0].0, p[6].0) && r[1].0 > r[0].0 && near(r[1].1, p[6].1) && r[0].1 > r[1].1, "{r:?}");
+    assert!(parse_position("middle").is_none() && parse_position("center-left") == Some((Align::Left, VAlign::Middle)));
 }

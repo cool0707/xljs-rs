@@ -3184,6 +3184,22 @@
     return out;
   }
 
+  /** addText's position ("bottom-right", "右下", "bottomRight", "bottom", "center" ...) as "bottom-right" / "top-center" / "center". */
+  function pdfPosition(p) {
+    const s = String(p).trim();
+    const ja = { 左上: "top-left", 上中央: "top-center", 中央上: "top-center", 上: "top-center", 右上: "top-right",
+      左: "center-left", 左中央: "center-left", 中央: "center", 右: "center-right", 右中央: "center-right",
+      左下: "bottom-left", 下中央: "bottom-center", 中央下: "bottom-center", 下: "bottom-center", 右下: "bottom-right" };
+    if (ja[s]) return ja[s];
+    const w = s.replace(/([a-z])([A-Z])/g, "$1-$2").toLowerCase().split(/[\s_-]+/).map((x) => (x === "middle" ? "center" : x));
+    const ok = w.length > 0 && w.length <= 2 && new Set(w).size === w.length
+      && w.every((x) => ["top", "bottom", "left", "right", "center"].includes(x))
+      && !(w.includes("top") && w.includes("bottom")) && !(w.includes("left") && w.includes("right"));
+    if (!ok) throw new TypeError(T("pdfdoc.badPosition", s));
+    const v = w.find((x) => x === "top" || x === "bottom"), h = w.find((x) => x === "left" || x === "right");
+    return v || h ? `${v || "center"}-${h || "center"}` : "center";
+  }
+
   function pdfOptions(o, what) {
     if (o === undefined || o === null) return {};
     if (typeof o !== "object" || Array.isArray(o)) throw new TypeError(T("pdfdoc.badOptions", what));
@@ -3289,6 +3305,13 @@
       if (o.align !== undefined && o.align !== null) {
         if (!["left", "center", "right"].includes(o.align)) throw new TypeError(T("pdfdoc.badAlign"));
         opts.align = o.align;
+      }
+      if (o.position !== undefined && o.position !== null) opts.position = pdfPosition(o.position);
+      if (o.margin !== undefined && o.margin !== null) {
+        const m = o.margin;
+        opts.margin = typeof m === "object"
+          ? [pdfNumber(m.x, "margin.x", 0) ?? 10, pdfNumber(m.y, "margin.y", 0) ?? 10]
+          : [pdfNumber(m, "margin", 0), pdfNumber(m, "margin", 0)];
       }
       if (o.color !== undefined && o.color !== null) opts.color = String(o.color);
       if (o.font !== undefined && o.font !== null) {

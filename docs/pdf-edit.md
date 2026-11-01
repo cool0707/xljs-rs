@@ -12,7 +12,8 @@ doc.insert(2, doc, { pages: [-1] });                   // 自分自身から = �
 doc.insertBlankPage(1, { paper: "A4", landscape: true });
 doc.removePages("5-6,-1");
 doc.rotatePages("all", 90);
-doc.addText("all", (p) => `${p.number} / ${p.count}`, { bottom: 10, align: "center", size: 9 });
+doc.addText("all", (p) => `${p.number} / ${p.count}`, { position: "bottom-center", size: 9 });
+doc.addText("all", "資料番号 A-001", { position: "top-right", margin: { x: 15, y: 8 } });
 doc.save("out.pdf");                                    // this を返す。省略で開いたファイルに上書き
 pdf.merge(["a.pdf", "b.pdf"], "c.pdf");                 // 保存して絶対パス（dest なしは PdfDocument）
 ```
@@ -42,8 +43,14 @@ pdf.merge(["a.pdf", "b.pdf"], "c.pdf");                 // 保存して絶対パ
 - 座標は「表示したときのページ」（`CropBox`（なければ `MediaBox`）を `Rotate` だけ回したもの）の左上からの mm。
   内容の先頭に `cm` で表示の座標（左下が原点、pt）→ ページの座標の変換を置く（0°: `1 0 0 1 x0 y0`、90°: `0 1 -1 0 x1 y0`、
   180°: `-1 0 0 -1 x1 y1`、270°: `0 -1 1 0 x0 y1`）。
-- 位置: `x`（`align` が center / right なら中央・右端の位置）か `right`、`y`（文字の上端）か `bottom`（最後の行の下端）。
-  1 行目のベースラインは上端から最初のフォントの ascender、行の間隔は `size × lineHeight`。`rotate` は (x, 上端) を中心に反時計回り。
+- 位置: 置き場所の点（アンカー）と、文字のかたまり（全行）のどこをそこに合わせるか（横: 左端・中央・右端、縦: 上端・中央・下端）で決める。
+  - `position`（`"top-left"` … `"bottom-right"`・`"center-left"`・`"center"`。prelude の `pdfPosition` が `"右下"` `"bottomRight"` `"bottom"` `"middle left"` などをこの形にする）:
+    四隅・辺の中央・ページの中央から `margin`（mm、既定 10、[横, 縦]）だけ内側。かたまりの合わせる側も同じ（右下ならかたまりの右下）。
+  - `x`（かたまりの左端。`align` が center / right なら中央・右端）か `right`（右端）、`y`（上端）か `bottom`（下端）。指定した向きは `position` より優先。
+  - どれもなければ `align` に応じてページの左端・中央・右端、上端。
+  - 行の揃え（`align`。省略時はかたまりの合わせる側）はかたまりの幅（最も長い行）の中で。1 行目のベースラインはかたまりの上端から最初のフォントの ascender、
+    かたまりの高さは ascender ＋ descender ＋ 行の間隔（`size × lineHeight`）×（行数 − 1）。
+  - `rotate` はアンカーを中心に反時計回り（`center` ならかたまりの中心で回るので透かしに使える）。
   `opacity` は ExtGState（`ca` / `CA`）。
 - 既存の内容は最初に文字を足すときだけ `q` … `Q` で囲む（内容がグラフィックスの状態を戻さずに終わっても、足した文字がずれないように）。
   `Contents` は配列にして後ろに足す。ページのリソース（`Font` `ExtGState`）は複数のページで共有されていることがあるので、ページ自身の辞書にコピーしてから足す。
@@ -74,7 +81,7 @@ pdf.merge(["a.pdf", "b.pdf"], "c.pdf");                 // 保存して絶対パ
 ## 5. テスト
 
 - `src/pdf/tests.rs`: 入れ子のページの木（継承した `MediaBox` `Resources` `Rotate`）、結合・削除・回転・白紙、暗号化、文字の追加
-  （回転したページの変換・色・不透明度・フォントの共有）、日本語のフォールバック、CFF のフォント、エラー。結果は lopdf の
+  （回転したページの変換・色・不透明度・フォントの共有）、`position` と `margin`・`x` の優先（`Tm` の座標で確かめる）、日本語のフォールバック、CFF のフォント、エラー。結果は lopdf の
   `extract_text`（ToUnicode 経由）で確かめる。フォントがない環境では文字のテストを飛ばす。
 - `testdata/scripts/pdfedit.test.js`（mock、デバッガ経由でも）: JS の API・ページの指定・エラーの文・保存と読み直し・merge・パスワード。
 - 見た目は `pdftoppm` で画像にして確認した（回転したページの文字の向き・透かし・中央揃え）。

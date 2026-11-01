@@ -287,6 +287,7 @@
     "pdfdoc.badRotation": "rotatePages: the angle must be a multiple of 90",
     "pdfdoc.expectedSource": "{0}: expected a PdfDocument, a path, a handle, a File, a Blob or an ArrayBuffer",
     "pdfdoc.expectedText": "addText: the text must be a string or a function",
+    "pdfdoc.badPosition": "addText: invalid position: {0} (\"top-left\", \"top-center\", \"top-right\", \"center\", \"bottom-left\", \"bottom-center\", \"bottom-right\" ...)",
     "pdfdoc.badAlign": "addText: align must be \"left\", \"center\" or \"right\"",
     "chart.noWindow": "(a {0} chart: shown as a table; charts are drawn in windows only)",
     "chart.planned": "Planned {0}%",

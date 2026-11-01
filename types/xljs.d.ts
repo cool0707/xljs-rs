@@ -1598,8 +1598,26 @@ declare global {
     height?: number;
   }
 
-  /** addText のオプション。位置は表示したときのページの左上からの mm（回転したページでも見た目の向き） */
+  /**
+   * addText の置き場所。ページの四隅・上下の中央・中央から margin（mm）だけ内側に置く。
+   * 日本語の "左上" "上中央" "右上" "左下" "下中央" "右下" "中央"、"bottomRight" "bottom"（= 下中央）なども使える
+   */
+  type PdfTextPosition =
+    | "top-left" | "top-center" | "top-right"
+    | "center-left" | "center" | "center-right"
+    | "bottom-left" | "bottom-center" | "bottom-right"
+    | "左上" | "上中央" | "右上" | "左" | "中央" | "右" | "左下" | "下中央" | "右下"
+    | (string & {});
+
+  /**
+   * addText のオプション。位置は position（四隅・中央など）で指定するのが簡単。細かく決めるときは
+   * x / y / right / bottom（表示したときのページの端からの mm。回転したページでも見た目の向き）
+   */
   interface PdfTextOptions {
+    /** 置き場所（例: ページ番号は "bottom-center"、資料番号は "top-right"）。x / y / right / bottom を指定した向きはそちらが優先 */
+    position?: PdfTextPosition;
+    /** position で置くときのページの端からの距離（mm。既定 10）。{ x: 横, y: 縦 } で別々に */
+    margin?: number | { x?: number; y?: number };
     /** 左端からの位置（mm）。align が "center" なら中央、"right" なら右端の位置。省略時は align に応じてページの左端・中央・右端 */
     x?: number;
     /** 上端から文字の上端までの位置（mm。既定 0） */
@@ -1614,11 +1632,11 @@ declare global {
     color?: string;
     /** 不透明度（0〜1。透かしには 0.2〜0.3 くらい） */
     opacity?: number;
-    /** 行の揃え（既定 "left"） */
+    /** 複数行のときの行の揃え（既定: position の左右に合わせる。x だけのときは x が左端・中央・右端のどれかも決める） */
     align?: "left" | "center" | "right";
     /** 行の間隔（文字の大きさの倍数。既定 1.3） */
     lineHeight?: number;
-    /** 回転（度。反時計回り。x, y の点が中心） */
+    /** 回転（度。反時計回り。置き場所の点（position なら角・中央、x / y なら文字の上端）が中心） */
     rotate?: number;
     /**
      * フォント: 名前（"游ゴシック" "メイリオ" "ＭＳ 明朝" "Arial" など）かフォントファイルのパス（.ttf .ttc .otf）。
@@ -1660,7 +1678,8 @@ declare global {
     rotatePages(pages: PdfPages, angle: number): this;
     /**
      * ページに文字を書く（"\n" で改行）。text を関数にするとページごとに呼ばれる（ページ番号など）。
-     * 例: doc.addText("all", (p) => `${p.number} / ${p.count}`, { bottom: 10, align: "center" })
+     * 例: doc.addText("all", (p) => `${p.number} / ${p.count}`, { position: "bottom-center" })
+     *     doc.addText("all", "資料番号 A-001", { position: "top-right", size: 9 })
      */
     addText(pages: PdfPages, text: string | ((page: PdfTextPage) => string), options?: PdfTextOptions): this;
     /** 保存。省略時は開いたファイルに上書き。保存した PDF は暗号化しない */

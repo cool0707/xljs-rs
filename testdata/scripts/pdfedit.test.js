@@ -60,6 +60,14 @@ if (fonts) {
   throws(() => doc.addText(1, "x", { size: -1 }), /size/);
   throws(() => doc.addText(1, "x", { font: "存在しないフォント" }), /フォントが見つかりません: 存在しないフォント/);
   throws(() => doc.addText(1, 3), /文字列か関数/);
+  // Positions: page numbers and document numbers in the corners and at the centers.
+  for (const pos of ["top-left", "top-center", "top-right", "bottom-left", "bottom-center", "bottom-right", "center",
+    "右下", "下中央", "bottomRight", "top", "bottom", "middle left", "CENTER"]) doc.addText(2, "No.1", { position: pos });
+  doc.addText(2, "資料 1", { position: "top-right", margin: { x: 15, y: 8 } });
+  doc.addText(2, "資料 2", { position: "bottom-left", margin: 5, size: 8 });
+  throws(() => doc.addText(1, "x", { position: "top-bottom" }), /position の指定が正しくありません: top-bottom/);
+  throws(() => doc.addText(1, "x", { position: "上下" }), /position/);
+  throws(() => doc.addText(1, "x", { position: "bottom-right", margin: -1 }), /margin/);
 }
 const saved = doc.save("out.pdf");
 equal(saved, doc);

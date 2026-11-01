@@ -14,17 +14,13 @@ const doc = pdf.merge(files);
 doc.insertBlankPage(1, { paper: "A4" });
 doc.addText(1, "資料一式", { y: 100, align: "center", size: 28 });
 doc.addText(1, files.map((f) => f.name).join("\n"), { y: 130, align: "center", size: 11, color: "#555" });
-doc.addText(1, dayjs().format("YYYY年M月D日"), { bottom: 30, align: "center" });
+doc.addText(1, dayjs().format("YYYY年M月D日"), { position: "bottom-center", margin: 30 });
 
 // ページ番号（表紙を除く）と透かし。
-doc.addText("2-", (p) => `${p.number - 1} / ${p.count - 1}`, { bottom: 8, align: "center", size: 9 });
-doc.addText("2-", "社外秘", { right: 10, y: 8, size: 12, color: "red" });
-// 透かしはページごとの大きさに合わせて中央に。
-for (const p of doc.pages) {
-  doc.addText(p.number, "CONFIDENTIAL", {
-    x: p.width / 2, y: p.height / 2 - 10, align: "center", size: 60, color: "gray", opacity: 0.15, rotate: 30,
-  });
-}
+doc.addText("2-", (p) => `${p.number - 1} / ${p.count - 1}`, { position: "bottom-center", margin: 8, size: 9 });
+doc.addText("2-", "社外秘", { position: "top-right", margin: 8, size: 12, color: "red" });
+// 透かしはページの中央に（文字の中心で回転）。
+doc.addText("all", "CONFIDENTIAL", { position: "center", size: 60, color: "gray", opacity: 0.15, rotate: 30 });
 
 // 不要なページの削除・向きの修正の例（必要なら）:
 // doc.removePages("3,5-6");

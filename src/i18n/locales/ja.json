@@ -287,6 +287,7 @@
     "pdfdoc.badRotation": "rotatePages: 角度は 90 の倍数で指定してください",
     "pdfdoc.expectedSource": "{0}: PdfDocument、パス、ハンドル、File、Blob、ArrayBuffer のいずれかを指定してください",
     "pdfdoc.expectedText": "addText: 文字列か関数を指定してください",
+    "pdfdoc.badPosition": "addText: position の指定が正しくありません: {0}（\"top-left\" \"top-center\" \"top-right\" \"center\" \"bottom-left\" \"bottom-center\" \"bottom-right\" や \"右下\" など）",
     "pdfdoc.badAlign": "addText: align は \"left\"、\"center\"、\"right\" のいずれかです",
     "chart.noWindow": "（{0} のグラフ: 表で表示します。グラフはウィンドウでのみ描画されます）",
     "chart.planned": "予定 {0}%",

@@ -112,7 +112,12 @@ pub struct TextOptions {
     pub size: f64,
     pub color: String,
     pub opacity: f64,
-    pub align: Align,
+    /// The alignment of the lines (None: from the anchor).
+    pub align: Option<Align>,
+    /// "top-left", "top-center", ... "bottom-right", "center": where the
+    /// text goes, margin (mm, horizontal and vertical) from the edges.
+    pub position: Option<String>,
+    pub margin: [f64; 2],
     pub line_height: f64,
     pub rotate: f64,
     /// The fonts to use, by name or path, tried in order for each character
@@ -130,12 +135,44 @@ impl Default for TextOptions {
             size: 11.0,
             color: String::new(),
             opacity: 1.0,
-            align: Align::Left,
+            align: None,
+            position: None,
+            margin: [10.0, 10.0],
             line_height: 1.3,
             rotate: 0.0,
             font: Vec::new(),
         }
     }
+}
+
+/// The vertical place of addText's position.
+#[derive(Clone, Copy, PartialEq, Debug)]
+pub enum VAlign {
+    Top,
+    Middle,
+    Bottom,
+}
+
+/// "top-left" ... "bottom-right", "top-center", "center-left", "center"
+/// (prelude's pdfPosition makes the other spellings into these).
+pub fn parse_position(p: &str) -> Option<(Align, VAlign)> {
+    let (v, h) = match p {
+        "center" => ("center", "center"),
+        _ => p.split_once('-')?,
+    };
+    let v = match v {
+        "top" => VAlign::Top,
+        "center" => VAlign::Middle,
+        "bottom" => VAlign::Bottom,
+        _ => return None,
+    };
+    let h = match h {
+        "left" => Align::Left,
+        "center" => Align::Center,
+        "right" => Align::Right,
+        _ => return None,
+    };
+    Some((h, v))
 }
 
 /// "#rgb", "#rrggbb" or a basic color name, as 0..1 components.
@@ -539,24 +576,52 @@ impl PdfDoc {
             _ => [1.0, 0.0, 0.0, 1.0, b[0], b[1]],
         };
         let block_h = ascent + descent + lh * (lines.len().saturating_sub(1)) as f64;
-        let (ax, align) = match (o.x, o.right) {
-            (Some(x), _) => (x * MM, o.align),
-            (None, Some(r)) => (w - r * MM, if o.align == Align::Left { Align::Right } else { o.align }),
+        // The point the text is placed by: horizontally the left, center or
+        // right of the block (ha), vertically its top, middle or bottom (va).
+        let (ph, pv) = match o.position.as_deref() {
+            Some(p) => parse_position(p).ok_or_else(|| err!("pdfdoc.badPosition", p))?,
+            None => (o.align.unwrap_or_default(), VAlign::Top),
+        };
+        let (mx, my) = (o.margin[0] * MM, o.margin[1] * MM);
+        let (ax, ha) = match (o.x, o.right) {
+            (Some(x), _) => (x * MM, if o.position.is_some() { ph } else { o.align.unwrap_or_default() }),
+            (None, Some(r)) => (w - r * MM, Align::Right),
+            (None, None) if o.position.is_some() => match ph {
+                Align::Left => (mx, ph),
+                Align::Center => (w / 2.0, ph),
+                Align::Right => (w - mx, ph),
+            },
             (None, None) => (
-                match o.align {
+                match ph {
                     Align::Left => 0.0,
                     Align::Center => w / 2.0,
                     Align::Right => w,
                 },
-                o.align,
+                ph,
             ),
         };
-        // The top of the block, from the bottom of the page.
-        let top = match (o.y, o.bottom) {
-            (Some(y), _) => h - y * MM,
-            (None, Some(bt)) => bt * MM + block_h,
-            (None, None) => h,
+        let (ay, va) = match (o.y, o.bottom) {
+            (Some(y), _) => (h - y * MM, VAlign::Top),
+            (None, Some(bt)) => (bt * MM, VAlign::Bottom),
+            (None, None) => match pv {
+                VAlign::Top => (h - if o.position.is_some() { my } else { 0.0 }, pv),
+                VAlign::Middle => (h / 2.0, pv),
+                VAlign::Bottom => (my, pv),
+            },
         };
+        // The top of the block, from the bottom of the page.
+        let top = match va {
+            VAlign::Top => ay,
+            VAlign::Middle => ay + block_h / 2.0,
+            VAlign::Bottom => ay + block_h,
+        };
+        let block_w = lines.iter().map(|l| l.1).fold(0.0, f64::max);
+        let left = match ha {
+            Align::Left => ax,
+            Align::Center => ax - block_w / 2.0,
+            Align::Right => ax - block_w,
+        };
+        let align = o.align.unwrap_or(ha);
 
         let mut s = String::from("q\n");
         s.push_str(&format!("{} {} {} {} {} {} cm\n", f(m[0]), f(m[1]), f(m[2]), f(m[3]), f(m[4]), f(m[5])));
@@ -571,16 +636,17 @@ impl PdfDoc {
         }
         if o.rotate != 0.0 {
             let (sn, cs) = o.rotate.to_radians().sin_cos();
-            s.push_str(&format!("1 0 0 1 {} {} cm\n{} {} {} {} 0 0 cm\n1 0 0 1 {} {} cm\n", f(ax), f(top), f(cs), f(sn), f(-sn), f(cs), f(-ax), f(-top)));
+            // Around the point the text is placed by.
+            s.push_str(&format!("1 0 0 1 {} {} cm\n{} {} {} {} 0 0 cm\n1 0 0 1 {} {} cm\n", f(ax), f(ay), f(cs), f(sn), f(-sn), f(cs), f(-ax), f(-ay)));
         }
         s.push_str(&format!("{} {} {} rg\nBT\n", f(color[0]), f(color[1]), f(color[2])));
         let mut names: HashMap<usize, String> = HashMap::new();
         for (k, (runs, lw)) in lines.iter().enumerate() {
             let base = top - ascent - lh * k as f64;
             let mut x = match align {
-                Align::Left => ax,
-                Align::Center => ax - lw / 2.0,
-                Align::Right => ax - lw,
+                Align::Left => left,
+                Align::Center => left + (block_w - lw) / 2.0,
+                Align::Right => left + block_w - lw,
             };
             for (u, cids) in runs {
                 let fname = match names.get(u) {
