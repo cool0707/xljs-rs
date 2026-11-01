@@ -9,6 +9,7 @@ mod dayjs;
 mod encoding;
 mod fs;
 mod numfmt;
+mod pdf;
 mod xlsx_calc;
 pub(crate) mod gopath;
 pub(crate) mod js;
@@ -80,6 +81,7 @@ pub struct Host {
     cleanup: RefCell<Vec<Box<dyn FnOnce()>>>,
     next_id: Cell<u64>,
     pub(crate) books: RefCell<HashMap<u64, xlsx::Book>>,
+    pub(crate) pdfs: RefCell<HashMap<u64, crate::pdf::PdfDoc>>,
     callbacks: RefCell<HashMap<u64, Persistent<Function<'static>>>>,
     values: RefCell<HashMap<u64, Persistent<Value<'static>>>>,
     natives: RefCell<Option<Persistent<Object<'static>>>>,
@@ -103,6 +105,7 @@ impl Host {
             cleanup: RefCell::new(Vec::new()),
             next_id: Cell::new(0),
             books: RefCell::new(HashMap::new()),
+            pdfs: RefCell::new(HashMap::new()),
             callbacks: RefCell::new(HashMap::new()),
             values: RefCell::new(HashMap::new()),
             natives: RefCell::new(None),
@@ -338,6 +341,7 @@ pub(crate) fn install_natives<'js>(ctx: &Ctx<'js>, host: &Rc<Host>) -> rquickjs:
     xlsx::install(&n);
     xlsx_style::install(&n);
     xlsx_print::install(&n);
+    pdf::install(&n);
     vba::install(&n);
     ui::install(&n);
     app::install(&n);

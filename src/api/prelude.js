@@ -3154,6 +3154,228 @@
     return printHtml(doc, [], dest, "htmlToPdf()");
   }
 
+  // ---------------------------------------------------------------- pdf (editing)
+  //
+  // pdf.open / pdf.create / pdf.merge: joining PDFs, removing, inserting and
+  // rotating pages, and adding text (src/pdf; natives in src/api/pdf.rs).
+  // Page numbers are 1-based, lengths in mm, font sizes in pt.
+
+  /** 0-based indexes of pages: a number (negative from the end), an array, "1-3,5,8-" or "all"/undefined. */
+  function pdfPageIndexes(spec, count) {
+    const bad = () => new TypeError(T("pdfdoc.badPages", typeof spec === "string" ? spec : inspect(spec)));
+    if (spec === undefined || spec === null || spec === "all") return Array.from({ length: count }, (_, i) => i);
+    const one = (n) => {
+      if (!Number.isInteger(n) || n === 0) throw bad();
+      return n < 0 ? count + n : n - 1;
+    };
+    const parts = typeof spec === "number" ? [spec] : typeof spec === "string" ? spec.split(",") : Array.isArray(spec) ? spec : null;
+    if (!parts) throw bad();
+    const out = [];
+    for (const p of parts) {
+      if (typeof p === "number") { out.push(one(p)); continue; }
+      const s = typeof p === "string" ? p.trim() : "";
+      const r = /^(\d+)\s*-\s*(\d*)$/.exec(s);
+      if (r) {
+        const a = one(Number(r[1])), b = r[2] === "" ? count - 1 : one(Number(r[2]));
+        for (let i = a; a <= b ? i <= b : i >= b; i += a <= b ? 1 : -1) out.push(i);
+      } else if (/^-?\d+$/.test(s)) out.push(one(Number(s)));
+      else throw bad();
+    }
+    return out;
+  }
+
+  /** addText's position ("bottom-right", "右下", "bottomRight", "bottom", "center" ...) as "bottom-right" / "top-center" / "center". */
+  function pdfPosition(p) {
+    const s = String(p).trim();
+    const ja = { 左上: "top-left", 上中央: "top-center", 中央上: "top-center", 上: "top-center", 右上: "top-right",
+      左: "center-left", 左中央: "center-left", 中央: "center", 右: "center-right", 右中央: "center-right",
+      左下: "bottom-left", 下中央: "bottom-center", 中央下: "bottom-center", 下: "bottom-center", 右下: "bottom-right" };
+    if (ja[s]) return ja[s];
+    const w = s.replace(/([a-z])([A-Z])/g, "$1-$2").toLowerCase().split(/[\s_-]+/).map((x) => (x === "middle" ? "center" : x));
+    const ok = w.length > 0 && w.length <= 2 && new Set(w).size === w.length
+      && w.every((x) => ["top", "bottom", "left", "right", "center"].includes(x))
+      && !(w.includes("top") && w.includes("bottom")) && !(w.includes("left") && w.includes("right"));
+    if (!ok) throw new TypeError(T("pdfdoc.badPosition", s));
+    const v = w.find((x) => x === "top" || x === "bottom"), h = w.find((x) => x === "left" || x === "right");
+    return v || h ? `${v || "center"}-${h || "center"}` : "center";
+  }
+
+  function pdfOptions(o, what) {
+    if (o === undefined || o === null) return {};
+    if (typeof o !== "object" || Array.isArray(o)) throw new TypeError(T("pdfdoc.badOptions", what));
+    return o;
+  }
+
+  function pdfNumber(v, k, min = -Infinity) {
+    if (v === undefined || v === null) return undefined;
+    const x = Number(v);
+    if (!isFinite(x) || x < min) throw new TypeError(T("pdfdoc.badNumber", k));
+    return x;
+  }
+
+  /** Opens src (anything pdf.open takes) as a native handle. */
+  function pdfOpenHandle(src, password, what) {
+    const pw = password === undefined || password === null ? "" : String(password);
+    if (src instanceof Blob && !(src instanceof File && src.path)) return native.pdfOpenBytes(src._bytes(), pw);
+    if (src instanceof ArrayBuffer || ArrayBuffer.isView(src)) return native.pdfOpenBytes(src, pw);
+    if (typeof src === "string" || src instanceof FileSystemHandle || src instanceof File || (src && typeof src.path === "string"))
+      return native.pdfOpen(native.pathResolve(toPath(src, what)), pw);
+    throw new TypeError(T("pdfdoc.expectedSource", what));
+  }
+
+  /** Runs f with the handle of src: its own for a PdfDocument, else a document opened (and closed) for it. */
+  function withPdfSource(src, options, what, f) {
+    if (src instanceof PdfDocument) return f(src._h);
+    const h = pdfOpenHandle(src, options.password, what);
+    try { return f(h); } finally { native.pdfClose(h); }
+  }
+
+  class PdfDocument {
+    constructor(h) { define(this, "_h", h); }
+    /** Path the document was opened from or last saved to (null for new documents). */
+    get path() { return native.pdfPath(this._h); }
+    get pageCount() { return native.pdfPageCount(this._h); }
+    /** [{ number, width, height, rotation }]: the size (mm) as shown and the rotation (0, 90, 180, 270) of each page. */
+    get pages() { return JSON.parse(native.pdfPages(this._h)).map((p, i) => Object.assign({ number: i + 1 }, p)); }
+    /** Adds the pages of src (another PdfDocument, a path, a handle, a File, a Blob or an ArrayBuffer) at the end. options: { pages, password } */
+    append(src, options) {
+      return this.insert(this.pageCount + 1, src, options);
+    }
+    /** Inserts the pages of src before page at (pageCount + 1 = at the end). options: { pages, password } */
+    insert(at, src, options) {
+      const o = pdfOptions(options, "insert()");
+      const pos = this._at(at);
+      withPdfSource(src, o, "insert()", (h) => {
+        native.pdfInsert(this._h, pos, h, pdfPageIndexes(o.pages, native.pdfPageCount(h)));
+      });
+      return this;
+    }
+    /** Inserts an empty page before page at (omitted: at the end). options: { paper, landscape, width, height } (size of the page next to it by default). */
+    insertBlankPage(at, options) {
+      if (at !== null && typeof at === "object") { options = at; at = undefined; }
+      const o = pdfOptions(options, "insertBlankPage()");
+      const count = this.pageCount;
+      const pos = at === undefined || at === null ? count : this._at(at);
+      let w, h;
+      if (o.paper !== undefined && o.paper !== null) {
+        const size = native.pdfPaperSize(String(o.paper));
+        if (!size) throw new TypeError(T("pdf.badPaper", String(o.paper)));
+        [w, h] = size;
+      } else if (count > 0) {
+        const p = JSON.parse(native.pdfPages(this._h))[Math.max(0, Math.min(pos, count) - 1)];
+        [w, h] = [p.width, p.height];
+      } else [w, h] = [210, 297];
+      w = pdfNumber(o.width, "width", 1) ?? w;
+      h = pdfNumber(o.height, "height", 1) ?? h;
+      if (o.landscape !== undefined && o.landscape !== null && !!o.landscape !== w > h) [w, h] = [h, w];
+      native.pdfInsertBlank(this._h, pos, w * 72 / 25.4, h * 72 / 25.4);
+      return this;
+    }
+    /** Removes pages: a page number, an array of them, or a string like "2-4,7" (negative numbers count from the end). */
+    removePages(pages) {
+      if (pages === undefined) throw new TypeError(T("pdfdoc.badPages", "undefined"));
+      native.pdfRemove(this._h, pdfPageIndexes(pages, this.pageCount));
+      return this;
+    }
+    /** Turns pages clockwise by angle (90, 180, 270, -90 ...). */
+    rotatePages(pages, angle) {
+      const a = Number(angle);
+      if (!Number.isInteger(a) || a % 90 !== 0) throw new TypeError(T("pdfdoc.badRotation"));
+      native.pdfRotate(this._h, pdfPageIndexes(pages, this.pageCount), a);
+      return this;
+    }
+    /**
+     * Writes text on pages ("all", a page number, an array or "1-3"). text is a string (lines split by "\n") or a function
+     * ({ number, count, width, height }) => string for each page. options: { x, y, right, bottom (mm), size (pt),
+     * color, opacity, align, lineHeight, rotate (degrees, counterclockwise), font (name or path, or an array of them) }
+     */
+    addText(pages, text, options) {
+      const o = pdfOptions(options, "addText()");
+      if (typeof text !== "string" && typeof text !== "function") throw new TypeError(T("pdfdoc.expectedText"));
+      const opts = {};
+      for (const k of ["x", "y", "right", "bottom"]) { const v = pdfNumber(o[k], k); if (v !== undefined) opts[k] = v; }
+      const size = pdfNumber(o.size, "size", 0);
+      if (size !== undefined) { if (size <= 0) throw new TypeError(T("pdfdoc.badNumber", "size")); opts.size = size; }
+      const lh = pdfNumber(o.lineHeight, "lineHeight", 0);
+      if (lh !== undefined) opts.lineHeight = lh;
+      const op = pdfNumber(o.opacity, "opacity", 0);
+      if (op !== undefined) { if (op > 1) throw new TypeError(T("pdfdoc.badNumber", "opacity")); opts.opacity = op; }
+      const rot = pdfNumber(o.rotate, "rotate");
+      if (rot !== undefined) opts.rotate = rot;
+      if (o.align !== undefined && o.align !== null) {
+        if (!["left", "center", "right"].includes(o.align)) throw new TypeError(T("pdfdoc.badAlign"));
+        opts.align = o.align;
+      }
+      if (o.position !== undefined && o.position !== null) opts.position = pdfPosition(o.position);
+      if (o.margin !== undefined && o.margin !== null) {
+        const m = o.margin;
+        opts.margin = typeof m === "object"
+          ? [pdfNumber(m.x, "margin.x", 0) ?? 10, pdfNumber(m.y, "margin.y", 0) ?? 10]
+          : [pdfNumber(m, "margin", 0), pdfNumber(m, "margin", 0)];
+      }
+      if (o.color !== undefined && o.color !== null) opts.color = String(o.color);
+      if (o.font !== undefined && o.font !== null) {
+        opts.font = (Array.isArray(o.font) ? o.font : [o.font]).map((f) => {
+          const s = typeof f === "string" ? expandEnv(f) : toPath(f, "addText()");
+          return /[\\/]|\.(ttf|ttc|otf|otc)$/i.test(s) ? native.pathResolve(s) : s;
+        });
+      }
+      const json = JSON.stringify(opts);
+      const idx = pdfPageIndexes(pages, this.pageCount);
+      if (typeof text === "string") native.pdfAddText(this._h, idx, text, json);
+      else {
+        const info = JSON.parse(native.pdfPages(this._h));
+        for (const i of idx) {
+          const p = info[i];
+          const s = text({ number: i + 1, count: info.length, width: p ? p.width : 0, height: p ? p.height : 0 });
+          native.pdfAddText(this._h, [i], s === undefined || s === null ? "" : String(s), json);
+        }
+      }
+      return this;
+    }
+    /** Saves to dest (path or handle), or to the file it was opened from. */
+    save(dest) {
+      native.pdfSave(this._h, dest === undefined || dest === null ? "" : native.pathResolve(toPath(dest, "save()")));
+      return this;
+    }
+    toArrayBuffer() { return native.pdfToBytes(this._h); }
+    toBlob() { return new Blob([native.pdfToBytes(this._h)], { type: MIME[".pdf"] }); }
+    close() { native.pdfClose(this._h); }
+    /** A page number (1 .. pageCount + 1) to a 0-based position. */
+    _at(at) {
+      const n = Number(at), count = this.pageCount;
+      if (!Number.isInteger(n) || n < 1 || n > count + 1) throw new RangeError(T("pdfdoc.badPage", String(at), String(count)));
+      return n - 1;
+    }
+    [inspectSymbol]() { return `PdfDocument { path: ${JSON.stringify(this.path)}, pageCount: ${this.pageCount} }`; }
+  }
+
+  const pdfObj = {
+    /** Opens a PDF from a path, handle, File, Blob or ArrayBuffer. options: { password } */
+    open(src, options) {
+      return new PdfDocument(pdfOpenHandle(src, pdfOptions(options, "pdf.open()").password, "pdf.open()"));
+    },
+    /** Creates an empty document (add pages with append / insertBlankPage). */
+    create() { return new PdfDocument(native.pdfCreate()); },
+    /** Joins PDFs (anything append takes) into one: with dest, saves it there and returns its full path; else returns the new document. */
+    merge(sources, dest) {
+      const doc = new PdfDocument(native.pdfCreate());
+      try {
+        for (const s of Array.from(sources || [])) doc.append(s);
+        if (dest === undefined || dest === null) return doc;
+        const p = native.pathResolve(toPath(dest, "pdf.merge()"));
+        doc.save(p);
+        doc.close();
+        return p;
+      } catch (e) {
+        doc.close();
+        throw e;
+      }
+    },
+    PdfDocument,
+  };
+  defineGlobal("pdf", pdfObj);
+
   // ---------------------------------------------------------------- csv
 
   /**

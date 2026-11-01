@@ -1558,6 +1558,150 @@ declare global {
   }
   const workbooks: Workbooks;
 
+  // ------------------------------------------------------------------ pdf
+
+  /** PDF の入力: パス・ハンドル・File・Blob・ArrayBuffer・バイト列 */
+  type PdfSource = PathLike | Blob | ArrayBuffer | ArrayBufferView;
+
+  /**
+   * ページの指定（1 始まり）: 番号、番号の配列、"1-3,5" のような文字列、"all"（すべて）。
+   * 負の番号は後ろから（-1 = 最後のページ）。"3-" は 3 ページ目から最後まで、"5-3" は逆順
+   */
+  type PdfPages = number | (number | string)[] | string;
+
+  interface PdfPageInfo {
+    /** ページ番号（1 始まり） */
+    number: number;
+    /** 表示したときの幅（mm。回転後） */
+    width: number;
+    /** 表示したときの高さ（mm。回転後） */
+    height: number;
+    /** 回転（時計回り。0 / 90 / 180 / 270） */
+    rotation: number;
+  }
+
+  interface PdfInsertOptions {
+    /** 取り込むページ（既定: すべて。並べた順に入る） */
+    pages?: PdfPages;
+    /** 取り込む PDF のパスワード */
+    password?: string;
+  }
+
+  interface PdfBlankPageOptions {
+    /** 用紙: "A3" "A4" "A5" "B4" "B5"（JIS）"Letter" "Legal" など（既定: 隣のページと同じ大きさ。ページがなければ A4） */
+    paper?: string;
+    /** 横向き */
+    landscape?: boolean;
+    /** 幅（mm） */
+    width?: number;
+    /** 高さ（mm） */
+    height?: number;
+  }
+
+  /**
+   * addText の置き場所。ページの四隅・上下の中央・中央から margin（mm）だけ内側に置く。
+   * 日本語の "左上" "上中央" "右上" "左下" "下中央" "右下" "中央"、"bottomRight" "bottom"（= 下中央）なども使える
+   */
+  type PdfTextPosition =
+    | "top-left" | "top-center" | "top-right"
+    | "center-left" | "center" | "center-right"
+    | "bottom-left" | "bottom-center" | "bottom-right"
+    | "左上" | "上中央" | "右上" | "左" | "中央" | "右" | "左下" | "下中央" | "右下"
+    | (string & {});
+
+  /**
+   * addText のオプション。位置は position（四隅・中央など）で指定するのが簡単。細かく決めるときは
+   * x / y / right / bottom（表示したときのページの端からの mm。回転したページでも見た目の向き）
+   */
+  interface PdfTextOptions {
+    /** 置き場所（例: ページ番号は "bottom-center"、資料番号は "top-right"）。x / y / right / bottom を指定した向きはそちらが優先 */
+    position?: PdfTextPosition;
+    /** position で置くときのページの端からの距離（mm。既定 10）。{ x: 横, y: 縦 } で別々に */
+    margin?: number | { x?: number; y?: number };
+    /** 左端からの位置（mm）。align が "center" なら中央、"right" なら右端の位置。省略時は align に応じてページの左端・中央・右端 */
+    x?: number;
+    /** 上端から文字の上端までの位置（mm。既定 0） */
+    y?: number;
+    /** x の代わりに右端からの位置（mm。文字の右端） */
+    right?: number;
+    /** y の代わりに下端からの位置（mm。最後の行の下端） */
+    bottom?: number;
+    /** 文字の大きさ（pt。既定 11） */
+    size?: number;
+    /** 色: "#rrggbb" "#rgb" か black / white / red / green / blue / yellow / orange / purple / gray / silver / navy（既定 black） */
+    color?: string;
+    /** 不透明度（0〜1。透かしには 0.2〜0.3 くらい） */
+    opacity?: number;
+    /** 複数行のときの行の揃え（既定: position の左右に合わせる。x だけのときは x が左端・中央・右端のどれかも決める） */
+    align?: "left" | "center" | "right";
+    /** 行の間隔（文字の大きさの倍数。既定 1.3） */
+    lineHeight?: number;
+    /** 回転（度。反時計回り。置き場所の点（position なら角・中央、x / y なら文字の上端）が中心） */
+    rotate?: number;
+    /**
+     * フォント: 名前（"游ゴシック" "メイリオ" "ＭＳ 明朝" "Arial" など）かフォントファイルのパス（.ttf .ttc .otf）。
+     * 配列なら文字ごとに前から順に探す。既定は言語の Excel のフォント（日本語は游ゴシック）と OS の標準のフォント。
+     * 使った文字だけを PDF に埋め込む
+     */
+    font?: string | FileSystemFileHandle | (string | FileSystemFileHandle)[];
+  }
+
+  /** addText の文字を返す関数に渡すページの情報 */
+  interface PdfTextPage {
+    /** ページ番号（1 始まり） */
+    number: number;
+    /** 全ページ数 */
+    count: number;
+    /** 幅（mm） */
+    width: number;
+    /** 高さ（mm） */
+    height: number;
+  }
+
+  /** 開いている PDF。変更は save() するまでファイルに書かれない。メソッドは this を返すのでつなげて書ける */
+  interface PdfDocument {
+    /** 開いたファイル・最後に保存したファイルのパス（新しい文書は null） */
+    readonly path: string | null;
+    readonly pageCount: number;
+    /** ページの大きさと回転 */
+    readonly pages: PdfPageInfo[];
+    /** src のページを最後に足す（結合）。src は別の PdfDocument か PDF ファイル */
+    append(src: PdfDocument | PdfSource, options?: PdfInsertOptions): this;
+    /** src のページを at ページ目の前に挿入する（at = pageCount + 1 で最後）。src に自分自身を渡すとページの複製 */
+    insert(at: number, src: PdfDocument | PdfSource, options?: PdfInsertOptions): this;
+    /** 白紙のページを at ページ目の前に挿入する（at を省くと最後） */
+    insertBlankPage(at?: number, options?: PdfBlankPageOptions): this;
+    insertBlankPage(options: PdfBlankPageOptions): this;
+    /** ページを削除する */
+    removePages(pages: PdfPages): this;
+    /** ページを時計回りに回転する（angle は 90 の倍数。-90 で反時計回り） */
+    rotatePages(pages: PdfPages, angle: number): this;
+    /**
+     * ページに文字を書く（"\n" で改行）。text を関数にするとページごとに呼ばれる（ページ番号など）。
+     * 例: doc.addText("all", (p) => `${p.number} / ${p.count}`, { position: "bottom-center" })
+     *     doc.addText("all", "資料番号 A-001", { position: "top-right", size: 9 })
+     */
+    addText(pages: PdfPages, text: string | ((page: PdfTextPage) => string), options?: PdfTextOptions): this;
+    /** 保存。省略時は開いたファイルに上書き。保存した PDF は暗号化しない */
+    save(dest?: PathLike): this;
+    toArrayBuffer(): ArrayBuffer;
+    toBlob(): Blob;
+    close(): void;
+  }
+
+  interface Pdf {
+    /** PDF を開く（パスワード付きの PDF は options.password） */
+    open(src: PdfSource, options?: { password?: string }): PdfDocument;
+    /** ページのない新しい文書 */
+    create(): PdfDocument;
+    /** PDF を 1 つにまとめる。dest を指定すると保存してその絶対パスを返し、省くと文書を返す */
+    merge(sources: (PdfDocument | PdfSource)[], dest: PathLike): string;
+    merge(sources: (PdfDocument | PdfSource)[]): PdfDocument;
+    PdfDocument: Function;
+  }
+  /** PDF の編集（結合・ページの削除・挿入・回転・文字の追加）。Excel・WebView2 は不要 */
+  const pdf: Pdf;
+
   // ------------------------------------------------------------------ dayjs
 
   /**

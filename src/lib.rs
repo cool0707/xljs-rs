@@ -6,6 +6,7 @@ pub mod ad;
 pub mod api;
 pub mod cli;
 pub mod engine;
+pub mod pdf;
 mod error;
 pub mod i18n;
 pub mod meta;
