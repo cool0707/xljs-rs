@@ -149,3 +149,21 @@ body.dragging iframe { pointer-events: none; }
 #status.ok { color: var(--ok); }
 #status.error { color: var(--error); }
 footer { padding: 4px 12px; }
+
+.wizard { max-width: 860px; }
+.wizard section { margin: 0 0 18px; }
+.wizard h3 { margin: 0 0 6px; }
+.wizard .opt { display: flex; align-items: center; gap: 6px; margin: 3px 0; }
+.wizard .opt input[type=radio] { margin: 0; accent-color: var(--accent); }
+.wizard .indent, .wizard .indent-input { margin-left: 24px; }
+.wizard .indent-input { width: calc(100% - 24px); margin-bottom: 4px; }
+.wizard input[type=text], .wizard textarea { margin: 4px 0; }
+.wizard .opt select { width: auto; }
+.wizard .row { display: flex; gap: 8px; align-items: center; margin: 8px 0; }
+.wizard #wz-text { font: 12px/1.5 var(--mono); -webkit-user-select: text; user-select: text; }
+.wizard[data-kind=new] .port-only { display: none; }
+.wizard[data-mode=app] .no-app { display: none; }
+.book-list { list-style: none; padding: 0; margin: 6px 0; }
+.book-list li { margin: 2px 0; }
+.book-list .err { color: var(--error); }
+.small-links .link { margin-left: 8px; }

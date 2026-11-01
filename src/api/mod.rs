@@ -18,6 +18,7 @@ mod ui;
 mod vba;
 mod xlsx;
 mod xlsx_chart;
+mod xlsx_outline;
 mod xlsx_print;
 mod xlsx_shape;
 mod xlsx_style;
@@ -38,6 +39,7 @@ use crate::ui::Ui;
 use crate::{Error, i18n};
 
 pub use app::{WindowAssets, page_url};
+pub use xlsx_outline::outline as workbook_outline;
 pub use encoding::{decode, detect_encoding, encode, norm_encoding};
 pub use js::A;
 

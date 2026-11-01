@@ -101,11 +101,12 @@
   function setTab(tab) {
     st.tab = tab;
     for (const b of document.querySelectorAll("#tabs [data-tab]")) b.classList.toggle("on", b.dataset.tab === tab);
-    if (tab !== "code") st.showWelcome = false;
-    const welcome = st.showWelcome || (!st.project && (tab === "code" || tab === "history" || tab === "preview"));
+    if (tab !== "code") { st.showWelcome = false; st.wizard = false; }
+    const welcome = !st.wizard && (st.showWelcome || (!st.project && (tab === "code" || tab === "history" || tab === "preview")));
     $("welcome").hidden = !welcome;
-    for (const p of ["code", "diff", "preview", "history", "output"]) $("panel-" + p).hidden = welcome || p !== tab;
-    if (tab === "code") $("code").focus();
+    $("wizard").hidden = !st.wizard;
+    for (const p of ["code", "diff", "preview", "history", "output"]) $("panel-" + p).hidden = welcome || st.wizard || p !== tab;
+    if (tab === "code" && !welcome && !st.wizard) $("code").focus();
     if (tab === "preview") showPreviewHint();
   }
 
@@ -244,6 +245,7 @@
     $("diff-apply").hidden = !(p || v);
     $("diff-discard").hidden = !(p || v);
     $("diff-target").hidden = !p;
+    $("diff-rename-label").hidden = true;
     if (!p && !v) {
       $("diff").replaceChildren();
       $("diff-title").textContent = "";
@@ -259,6 +261,9 @@
       t.value = p.target === null ? "" : p.target;
       $("diff-apply-label").textContent = L.apply;
       $("diff-apply").disabled = !p.target;
+      const canRename = !!(p.rename && st.project && p.target === st.project.entry);
+      $("diff-rename-label").hidden = !canRename;
+      if (canRename) $("diff-rename-text").textContent = fmt(L.renameTo, p.rename);
       if (p.target) renderDiff(p.old || "", p.text);
       else $("diff").replaceChildren(el("div", { className: "skip" }, L.chooseTargetHint));
     } else {
@@ -289,7 +294,8 @@
     $("diff-apply").onclick = () => {
       if (st.pending && st.pending.target) {
         if (st.pending.target === st.file) save();
-        send({ op: "apply", file: st.pending.target, text: st.pending.text, note: st.pending.name });
+        const rename = st.pending.rename && st.pending.target === st.project.entry && $("diff-rename").checked ? st.pending.rename : "";
+        send({ op: "apply", file: st.pending.target, text: st.pending.text, note: st.pending.name, rename });
         st.pending = null;
       } else if (st.versionView) {
         const v = st.versionView;
@@ -505,6 +511,7 @@
 
   function openProject(m) {
     st.showWelcome = false;
+    st.wizard = false;
     st.project = { path: m.path, dir: m.dir, entry: m.entry, app: m.app, html: m.html, title: m.title, files: m.files };
     st.pending = null;
     st.versionView = null;
@@ -532,6 +539,112 @@
       el("span", { className: "muted" }, " " + r.path))));
   }
 
+  // ------------------------------------------------------------ wizard
+
+  const wz = { books: [] };
+  const radio = (name) => { const r = document.querySelector(`input[name="${name}"]:checked`); return r ? r.value : ""; };
+  const setRadio = (name, v) => { const r = document.querySelector(`input[name="${name}"][value="${v}"]`); if (r) r.checked = true; };
+
+  function openWizard(kind) {
+    save();
+    setRadio("wz-kind", kind);
+    if (!$("wz-folder").value) $("wz-folder").value = st.home || "";
+    $("wz-error").hidden = true;
+    st.wizard = true;
+    st.showWelcome = false;
+    updateWizard();
+    setTab("code");
+    $("wizard").scrollTop = 0;
+  }
+
+  function updateWizard() {
+    const w = $("wizard"), port = radio("wz-kind") === "port";
+    w.dataset.kind = port ? "port" : "new";
+    w.dataset.mode = radio("wz-mode");
+    $("wz-overview-title").textContent = port ? L.wzOverviewPort : L.wzOverviewNew;
+    $("wz-overview").placeholder = port ? L.wzOverviewPortHint : L.wzOverviewNewHint;
+    $("wz-input-note").disabled = radio("wz-input") === "no";
+    $("wz-output-note").disabled = radio("wz-output") === "no";
+    $("wz-name").disabled = radio("wz-name-mode") !== "name";
+    $("wz-rows").disabled = !$("wz-sheets").checked;
+  }
+
+  function answers() {
+    const port = radio("wz-kind") === "port";
+    return {
+      kind: port ? "port" : "new",
+      books: port ? wz.books.filter((b) => !b.error).map((b) => b.path) : [],
+      includeVba: $("wz-vba").checked,
+      includeSheets: $("wz-sheets").checked,
+      sampleRows: Number($("wz-rows").value) || 0,
+      input: radio("wz-input"), inputNote: $("wz-input-note").value,
+      output: radio("wz-output"), outputNote: $("wz-output-note").value,
+      form: radio("wz-form"), mode: radio("wz-mode"),
+      nameMode: radio("wz-name-mode"), name: $("wz-name").value,
+      overview: $("wz-overview").value,
+      intro: $("wz-intro").checked,
+    };
+  }
+
+  function wizardError(text) {
+    $("wz-error").textContent = text || "";
+    $("wz-error").hidden = !text;
+    return !text;
+  }
+
+  function checkAnswers(a) {
+    if (a.kind === "port" && !a.books.length) return wizardError(L.wzNeedBooks);
+    if (a.kind === "new" && !a.overview.trim()) return wizardError(L.wzNeedOverview);
+    if (a.nameMode === "name" && !a.name.trim()) return wizardError(L.wzNeedName);
+    return wizardError("");
+  }
+
+  function wizardBooks(m) {
+    wz.books = m.books || [];
+    $("wz-book-list").replaceChildren(...wz.books.map((b) => el("li", { className: b.error ? "err" : "" },
+      icon("fa-regular fa-file-excel"), " ", b.name, " — ",
+      b.error ? b.error : b.modules ? fmt(L.wzModules, b.modules) : L.wzNoMacros)));
+    const f = $("wz-folder");
+    if (m.dir && (!f.value || f.value === st.home)) f.value = m.dir;
+  }
+
+  function wizardPrompt(m) {
+    $("wz-result").hidden = false;
+    $("wz-text").value = m.text;
+    const n = m.text.length;
+    $("wz-count").textContent = fmt(L.wzCount, n, m.file) + (n > 15000 ? " " + L.wzLong : "");
+    $("wz-result").scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  function initWizard() {
+    $("wizard").addEventListener("change", updateWizard);
+    $("wz-name").addEventListener("focus", () => setRadio("wz-name-mode", "name"));
+    $("wz-name").parentElement.addEventListener("click", (e) => {
+      if (e.target === $("wz-name") && $("wz-name").disabled) { setRadio("wz-name-mode", "name"); updateWizard(); $("wz-name").focus(); }
+    });
+    $("wz-books").onclick = () => send({ op: "wizardBooks" });
+    $("wz-folder-pick").onclick = () => send({ op: "wizardFolder", path: $("wz-folder").value });
+    $("wz-save-text").onclick = () => {
+      const a = answers();
+      if (!a.books.length) { wizardError(L.wzNeedBooks); return; }
+      send({ op: "wizardSave", answers: a });
+    };
+    $("wz-make").onclick = () => {
+      const a = answers();
+      if (checkAnswers(a)) send({ op: "wizardPrompt", answers: a });
+    };
+    $("wz-create").onclick = () => {
+      const a = answers();
+      if (!checkAnswers(a)) return;
+      if (!$("wz-folder").value.trim()) { wizardError(L.wzNeedFolder); return; }
+      send({ op: "wizardCreate", answers: a, path: $("wz-folder").value.trim(), text: $("wz-text").value });
+    };
+    $("wz-copy").onclick = () => copy($("wz-text").value, L.wzCopiedOnly);
+    $("wz-cancel").onclick = () => { st.wizard = false; setTab("code"); };
+    $("w-wizard").onclick = () => openWizard("new");
+    $("w-port").onclick = () => openWizard("port");
+  }
+
   // ------------------------------------------------------------ messages
 
   function handle(m) {
@@ -545,6 +658,12 @@
         document.documentElement.lang = m.lang || "ja";
         initChat(m.services || []);
         renderRecent(m.recent || []);
+        st.home = m.home || "";
+        $("wz-rows").options[0].textContent = L.wzRowsNone;
+        $("wz-rows").value = "3";
+        $("wz-input-note").placeholder = L.wzInputHint;
+        $("wz-output-note").placeholder = L.wzOutputHint;
+        $("wz-name").placeholder = L.wzNameHint;
         updateButtons();
         showDiff();
         setTab("code");
@@ -598,7 +717,7 @@
         setTab("diff");
         break;
       case "download":
-        st.pending = { name: m.name, text: m.text, target: m.target, old: m.old === undefined ? null : m.old, files: m.files || [] };
+        st.pending = { name: m.name, text: m.text, target: m.target, old: m.old === undefined ? null : m.old, files: m.files || [], rename: m.rename || "" };
         if (st.pending.target && st.pending.old === null) st.pending.old = "";
         st.versionView = null;
         showDiff();
@@ -612,7 +731,7 @@
         }
         break;
       case "copy":
-        copy(m.text, m.what === "intro" ? L.copiedIntro : L.copied);
+        copy(m.text, m.what === "intro" ? L.copiedIntro : m.what === "wizard" ? L.wzCopied : L.copied);
         break;
       case "runStarted": runStarted(m); break;
       case "output": appendOutput(m.text, m.stream === "stderr" ? "err" : ""); break;
@@ -631,6 +750,12 @@
       case "error":
         status(m.message, "error");
         break;
+      case "info":
+        status(m.message, "ok");
+        break;
+      case "wizardBooks": wizardBooks(m); break;
+      case "wizardFolder": $("wz-folder").value = m.path; break;
+      case "wizardPrompt": wizardPrompt(m); break;
     }
   }
 
@@ -646,7 +771,8 @@
   initDiff();
   initPreview();
   initRun();
-  for (const b of document.querySelectorAll("#tabs [data-tab]")) b.onclick = () => setTab(b.dataset.tab);
+  initWizard();
+  for (const b of document.querySelectorAll("#tabs [data-tab]")) b.onclick = () => { st.wizard = false; st.showWelcome = false; setTab(b.dataset.tab); };
   $("btn-open").onclick = $("w-open").onclick = () => { save(); send({ op: "open" }); };
   $("btn-new").onclick = () => { save(); st.showWelcome = true; setTab("code"); };
   $("w-new").onclick = () => send({ op: "new", app: false });

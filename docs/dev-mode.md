@@ -16,6 +16,16 @@ AI チャットと並べてスクリプトを作る・直すための画面。�
 
 `ui::run` のスクリプトスレッドでセッションのループ（`mpsc` の受信）を回し、ダイアログ・ウィンドウは通常のスクリプトと同じく UI スレッドへ転送する。
 
+## 新規作成ウィザード（`src/dev/wizard.rs`）
+
+ページの `#wizard`（キャンバスの中）で答えを集め、`wizard::Answers` として送る。
+
+- `wizardBooks`: ブックを選ばせ、マクロのモジュール数を返す（`wizard::books`）。
+- `wizardPrompt`: 依頼文（`wizard::prompt`）。先頭に `docs/ai/prompt.md`（選んだとき）、条件（形・入力・ファイル名・ブック・入出力ファイル）、やりたいこと、移植ならマクロ（`vba::text`）とシートの構成（`api::workbook_outline`: シートごとの大きさ、先頭 n 行の表、数式。参照を相対化した形が同じ数式は 1 行にまとめる。共有数式もまとめる。.xls はシートを読めない旨だけ）、回答のしかた（移植ならまず説明、仮定を書く、ファイル名を指定してファイルで出力、アプリなら画面も）。
+- `wizardSave`: マクロとシートの構成だけをテキスト（.md）に保存（長さに上限のあるチャットで添付するため）。
+- `wizardCreate`: フォルダに仮のスクリプト（アプリなら雛形と `ui/index.html`）を作って開き、依頼文をコピーさせる。名前が「おまかせ」「未定」なら `.xljs/dev.json` の `unnamed` に入れる。
+- `unnamed` の入口のスクリプトに AI のスクリプトのファイルが来たら、`download` に `rename`（ブラウザの ` (1)` を除いた名前）を付ける。ページで「名前を変える」がオンのまま承認すると、置き換えたあと名前を変え、履歴のフォルダとチャットの紐付けも移す（`Session::rename_entry`）。
+
 ## AI チャットの枠
 
 - ページの WebView2 とは別に、子ウィンドウ（`xljsBrowserHost`）に 2 つ目の WebView2 を作る。外部サイトは iframe に入れられない（X-Frame-Options）ため。環境（ユーザーデータフォルダ）はページと同じなので、サインインは残る。
@@ -58,6 +68,7 @@ AI チャットと並べてスクリプトを作る・直すための画面。�
 | `run` `stop` `preview` | 実行（`debug`）・停止・フォームのプレビュー |
 | `chat` `browser` | チャットの URL（空でホーム）、枠の表示・位置・戻る・進む・再読み込み |
 | `intro` `showFolder` | AI への説明のコピー、フォルダを開く |
+| `wizardBooks` `wizardFolder` `wizardPrompt` `wizardSave` `wizardCreate` | 新規作成ウィザード（`answers`） |
 
 | Rust → ページ（`type`） | 内容 |
 |---|---|
@@ -66,7 +77,8 @@ AI チャットと並べてスクリプトを作る・直すための画面。�
 | `download` | ダウンロードしたファイル（`name` `text` `target` `old` `files`） |
 | `runStarted` `output` `runEnded` | 実行。`runEnded` は失敗時に `message` `location` `prompt` |
 | `previewForm` `previewFailed` | フォームのプレビュー |
-| `url` `copy` `error` `browserFailed` | チャットの URL、クリップボードへのコピー、エラー |
+| `url` `copy` `error` `info` `browserFailed` | チャットの URL、クリップボードへのコピー、エラー・お知らせ |
+| `wizardBooks` `wizardFolder` `wizardPrompt` | ウィザードの答え |
 
 ページの配置（両方 / チャットだけ / キャンバスだけ、左右の入れ替え、境目の位置）はページの `localStorage` に保存する。最近使ったスクリプトはユーザーの設定（`%APPDATA%\xljs\dev.json`）。
 

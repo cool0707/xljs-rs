@@ -41,7 +41,7 @@ fn is_text(name: &str) -> bool {
 
 /// The name without the extension and without the suffix that browsers
 /// add to a name that is already taken ("main (1).js" → "main").
-fn base_stem(name: &str) -> String {
+pub(crate) fn base_stem(name: &str) -> String {
     let stem = Path::new(name).file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
     let t = stem.trim_end();
     if let Some(open) = t.rfind('(')

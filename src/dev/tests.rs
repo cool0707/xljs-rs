@@ -278,3 +278,116 @@ fn runner_reports_output_and_exit() {
     }
     assert_eq!((out.as_str(), err.as_str(), code), ("あいう", "err", Some(3)));
 }
+
+fn port_answers(book: &str) -> wizard::Answers {
+    wizard::Answers {
+        kind: "port".into(),
+        books: vec![book.into()],
+        include_vba: true,
+        include_sheets: true,
+        sample_rows: 2,
+        input: "yes".into(),
+        input_note: "販売システムの売上 xlsx".into(),
+        output: "auto".into(),
+        form: "yes".into(),
+        mode: "auto".into(),
+        name_mode: "auto".into(),
+        intro: false,
+        ..Default::default()
+    }
+}
+
+#[test]
+fn wizard_prompts() {
+    let _l = lock_lang("ja");
+    let dir = tempdir();
+    // A workbook with data and formulas copied down.
+    let book = dir.join("売上.xlsx");
+    let mut wb = umya_spreadsheet::new_file();
+    {
+        let ws = wb.sheet_by_name_mut("Sheet1").unwrap();
+        ws.set_name("明細");
+        for (c, h) in ["日付", "顧客", "数量", "単価", "金額"].iter().enumerate() {
+            ws.cell_mut((c as u32 + 1, 1)).set_value(*h);
+        }
+        for r in 2..=6u32 {
+            ws.cell_mut((2, r)).set_value(format!("顧客{r}"));
+            ws.cell_mut((3, r)).set_value_number(r as f64);
+            ws.cell_mut((4, r)).set_value_number(100.0);
+            ws.cell_mut((5, r)).set_formula(format!("C{r}*D{r}"));
+        }
+        ws.cell_mut((5, 7)).set_formula("SUM(E2:E6)");
+    }
+    umya_spreadsheet::writer::xlsx::write(&wb, &book).unwrap();
+    let o = crate::api::workbook_outline(&book.to_string_lossy(), 2).unwrap();
+    assert!(o.contains("シート「明細」（A1:E7、7 行 × 5 列）"), "{o}");
+    assert!(o.contains("先頭 2 行") && o.contains("| 1 | 日付 | 顧客 |") && !o.contains("顧客3"), "{o}");
+    assert!(o.contains("E2: `=C2*D2` （E2〜E6 に同じ形の数式が 5 セル）") && o.contains("E7: `=SUM(E2:E6)`"), "{o}");
+    assert!(!crate::api::workbook_outline(&book.to_string_lossy(), 0).unwrap().contains("先頭"));
+
+    // A port: the macro, the sheets and the conditions.
+    let macro_book = crate::testutil::repo_path("testdata/scripts/macro.xlsm").to_string_lossy().into_owned();
+    let a = port_answers(&macro_book);
+    let p = wizard::prompt(&a);
+    assert!(p.starts_with("# 依頼: Excel のマクロ（VBA）を xljs に移植する"), "{p}");
+    assert!(p.contains("Sub 売上集計()") && p.contains("## ブックのシート構成"), "{p}");
+    assert!(p.contains("- 入力: 入力フォーム（ui.form）") && p.contains("- 入力ファイル: あり — 販売システムの売上 xlsx"), "{p}");
+    assert!(p.contains("内容が分かる短い日本語の名前") && p.contains("特になし。マクロと同じ動作"), "{p}");
+    assert!(p.contains("まずマクロが何をしているか") && !p.contains("あなたは「xljs」"), "{p}");
+    assert_eq!(wizard::file_name(&a), "新しいスクリプト.js");
+    // Without the code and with the instructions first.
+    let p = wizard::prompt(&wizard::Answers { include_vba: false, include_sheets: false, intro: true, ..a.clone() });
+    assert!(p.starts_with("あなたは「xljs」") && !p.contains("Sub 売上集計()") && !p.contains("シート構成"));
+
+    // A new app with a name: no form question, the page asked for.
+    let a = wizard::Answers {
+        kind: "new".into(),
+        mode: "app".into(),
+        form: "yes".into(),
+        name_mode: "name".into(),
+        name: "在庫/管理".into(),
+        overview: "在庫を一覧で見たい".into(),
+        ..Default::default()
+    };
+    let p = wizard::prompt(&a);
+    assert_eq!(wizard::file_name(&a), "在庫_管理.js");
+    assert!(p.contains("「在庫_管理.js」") && p.contains("## やりたいこと\n\n在庫を一覧で見たい") && p.contains("ui/index.html"), "{p}");
+    assert!(!p.contains("- 入力:") && !p.contains("入力ファイル"), "{p}");
+    assert_eq!(wizard::file_name(&wizard::Answers { name_mode: "name".into(), name: "a.ts".into(), ..Default::default() }), "a.ts");
+}
+
+#[test]
+fn wizard_creates_and_ai_names() {
+    let _l = lock_lang("ja");
+    let dir = tempdir();
+    let (mut s, w, _rx) = session(&dir, "{}");
+    page(&mut s, json!({"op": "ready"}));
+    let a = json!({"kind": "new", "mode": "auto", "nameMode": "auto", "overview": "x"});
+    page(&mut s, json!({"op": "wizardPrompt", "answers": a}));
+    assert!(w.take("wizardPrompt")[0]["text"].as_str().unwrap().contains("## やりたいこと\n\nx"));
+    page(&mut s, json!({"op": "wizardCreate", "answers": a, "path": dir.join("nope").to_string_lossy(), "text": "T"}));
+    assert!(!w.take("error").is_empty());
+    page(&mut s, json!({"op": "wizardCreate", "answers": a, "path": dir.to_string_lossy(), "text": "T"}));
+    let posts = w.posts.lock().unwrap().clone();
+    w.posts.lock().unwrap().clear();
+    assert!(posts.iter().any(|v| v["type"] == "project" && v["entry"] == "新しいスクリプト.js"));
+    assert!(posts.iter().any(|v| v["type"] == "copy" && v["text"] == "T"));
+    assert!(read_text(&dir.join("新しいスクリプト.js")).unwrap().contains("AI の回答で置き換えます"));
+    s.event(Event::Browser(BrowserEvent::Url("https://chat.example/c/2".into())));
+
+    // The AI's file names the script.
+    let dl = dir.join("dl");
+    write(&dl, "売上集計 (1).js", "alert(1);\n");
+    s.event(Event::Browser(BrowserEvent::Downloaded { path: dl.join("売上集計 (1).js").to_string_lossy().into(), name: "売上集計 (1).js".into() }));
+    let d = w.take("download");
+    assert_eq!((d[0]["target"].as_str(), d[0]["rename"].as_str()), (Some("新しいスクリプト.js"), Some("売上集計.js")));
+    page(&mut s, json!({"op": "apply", "file": "新しいスクリプト.js", "text": "alert(1);\n", "note": "売上集計 (1).js", "rename": "売上集計.js"}));
+    let p = w.take("project");
+    assert_eq!((p[0]["entry"].as_str(), p[0]["text"].as_str(), p[0]["chat"].as_str()), (Some("売上集計.js"), Some("alert(1);\n"), Some("https://chat.example/c/2")));
+    assert!(!dir.join("新しいスクリプト.js").exists());
+    assert_eq!(versions::list(&dir, "売上集計.js").len(), 1);
+    // Named now: the next answer does not rename it.
+    write(&dl, "売上集計_v2.js", "alert(2);\n");
+    s.event(Event::Browser(BrowserEvent::Downloaded { path: dl.join("売上集計_v2.js").to_string_lossy().into(), name: "売上集計_v2.js".into() }));
+    assert_eq!(w.take("download")[0]["rename"], Value::Null);
+}

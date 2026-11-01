@@ -17,6 +17,7 @@ pub mod project;
 pub mod report;
 pub mod runner;
 pub mod versions;
+pub mod wizard;
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -97,6 +98,9 @@ struct GlobalSettings {
 struct ProjectSettings {
     /// The AI chat used for each script (entry name → URL).
     chat: HashMap<String, String>,
+    /// Scripts whose name is temporary (the wizard's "later" and "up to
+    /// the AI"): the first answer of the AI may rename them.
+    unnamed: Vec<String>,
 }
 
 fn load<T: for<'a> Deserialize<'a> + Default>(p: &Path) -> T {
@@ -208,6 +212,10 @@ struct Request {
     width: f64,
     height: f64,
     scale: f64,
+    /// The new name of the file (apply).
+    rename: String,
+    /// The wizard's answers.
+    answers: wizard::Answers,
 }
 
 /// The state of the development window.
@@ -317,6 +325,9 @@ impl Session {
                 p.path(&r.file)?;
                 let note = if r.note.is_empty() { t!("dev.noteApplied") } else { t!("dev.noteAppliedFrom", r.note) };
                 versions::replace(&p.dir, &r.file, &r.text, &note)?;
+                if !r.rename.is_empty() && r.rename != r.file && r.file == p.entry_name() {
+                    return self.rename_entry(&p, &r.rename);
+                }
                 self.post(json!({"type": "applied", "file": r.file, "text": r.text}));
                 self.post_versions(&r.file);
                 self.post_files();
@@ -377,6 +388,46 @@ impl Session {
                     self.w.browser(BrowserCommand::Navigate(r.url));
                 }
             }
+            "wizardBooks" => {
+                let paths = self.u.open_files(&PickerOptions {
+                    title: t!("cli.selectMacroBooks"),
+                    multiple: true,
+                    filters: vec![FileFilter {
+                        description: t!("wizard.books"),
+                        patterns: ["*.xlsm", "*.xlsb", "*.xls", "*.xlsx", "*.xltm", "*.xlam"].iter().map(|s| s.to_string()).collect(),
+                    }],
+                    ..Default::default()
+                });
+                if !paths.is_empty() {
+                    let dir = Path::new(&paths[0]).parent().map(|d| d.to_string_lossy().into_owned()).unwrap_or_default();
+                    self.post(json!({"type": "wizardBooks", "books": wizard::books(&paths), "dir": dir}));
+                }
+            }
+            "wizardFolder" => {
+                if let Some(d) = self.u.pick_directory(&PickerOptions { title: t!("wizard.folderTitle"), start_in: r.path, ..Default::default() }) {
+                    self.post(json!({"type": "wizardFolder", "path": d}));
+                }
+            }
+            "wizardPrompt" => {
+                let text = wizard::prompt(&r.answers);
+                self.post(json!({"type": "wizardPrompt", "text": text, "file": wizard::file_name(&r.answers)}));
+            }
+            "wizardSave" => {
+                let first = r.answers.books.first().cloned().unwrap_or_default();
+                let p = Path::new(&first);
+                let stem = p.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
+                if let Some(out) = self.u.save_file(&PickerOptions {
+                    title: t!("wizard.saveTitle"),
+                    start_in: p.parent().map(|d| d.to_string_lossy().into_owned()).unwrap_or_default(),
+                    suggested_name: format!("{stem}_xljs.md"),
+                    filters: vec![FileFilter { description: t!("wizard.textFiles"), patterns: vec!["*.md".into(), "*.txt".into()] }],
+                    ..Default::default()
+                }) {
+                    wizard::save_text(&r.answers, Path::new(&out))?;
+                    self.post(json!({"type": "info", "message": t!("wizard.savedText", out)}));
+                }
+            }
+            "wizardCreate" => self.wizard_create(&r.answers, &r.path, &r.text)?,
             "browser" => {
                 let cmd = match r.path.as_str() {
                     "show" => BrowserCommand::Show { x: r.x, y: r.y, width: r.width, height: r.height, scale: if r.scale > 0.0 { r.scale } else { 1.0 } },
@@ -408,6 +459,7 @@ impl Session {
             "texts": texts(),
             "services": SERVICES.iter().map(|(n, u)| json!({"name": n, "url": u})).collect::<Vec<_>>(),
             "recent": recent,
+            "home": default_dir(&gs),
         })
     }
 
@@ -504,26 +556,87 @@ impl Session {
         }) else {
             return Ok(());
         };
-        let p = Path::new(&path);
-        let title = p.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
-        if app {
-            write_text(p, &format!(
-                "// ==xljs==\n// @mode   app\n// @html   ui/index.html\n// @assets ui/\n// @title  {title}\n// ==/xljs==\n\n// {}\nexport function hello() {{\n  return \"{}\";\n}}\n",
-                t!("dev.templateAppComment"),
-                t!("dev.templateHello"),
-            ))?;
-            let html = p.parent().unwrap_or(Path::new(".")).join("ui").join("index.html");
-            if !html.exists() {
-                write_text(&html, &format!(
-                    "<!doctype html>\n<html lang=\"{}\">\n<head>\n<meta charset=\"utf-8\">\n<title>{title}</title>\n</head>\n<body>\n  <h1>{title}</h1>\n  <button data-action=\"hello\" data-result=\"message\">OK</button>\n  <p data-bind=\"message\"></p>\n</body>\n</html>\n",
-                    i18n::lang()
-                ))?;
-            }
-        } else {
-            write_text(p, &format!("// ==xljs==\n// @title {title}\n// ==/xljs==\n\nalert(\"{}\");\n", t!("dev.templateHello")))?;
-        }
+        write_template(Path::new(&path), app, false)?;
         self.open(&path)
     }
+
+    /// Creates the script the wizard was answered for in folder, opens it
+    /// and copies the first message for the chat.
+    fn wizard_create(&mut self, a: &wizard::Answers, folder: &str, text: &str) -> Result<()> {
+        let dir = Path::new(folder);
+        if folder.is_empty() || !dir.is_dir() {
+            return Err(err!("wizard.noFolder"));
+        }
+        let path = wizard::free_path(dir, &wizard::file_name(a));
+        write_template(&path, a.mode == "app", true)?;
+        let entry = path.file_name().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
+        if a.name_mode != "name" || a.name.trim().is_empty() {
+            let f = dir.join(project::DATA_DIR).join("dev.json");
+            let mut ps: ProjectSettings = load(&f);
+            ps.unnamed.push(entry);
+            store(&f, &ps);
+        }
+        self.open(&path.to_string_lossy())?;
+        self.post(json!({"type": "copy", "what": "wizard", "text": text}));
+        Ok(())
+    }
+
+    /// Renames the entry script (with its versions and its chat) after the
+    /// AI's first answer named it.
+    fn rename_entry(&mut self, p: &Project, to: &str) -> Result<()> {
+        let from = p.entry_name();
+        let new = p.path(to)?;
+        if new.exists() {
+            return Err(Error::path("rename", new.display().to_string(), std::io::Error::from(std::io::ErrorKind::AlreadyExists)));
+        }
+        std::fs::rename(&p.entry, &new).map_err(|e| Error::Link { op: "rename".into(), old: p.entry.display().to_string(), new: new.display().to_string(), source: e })?;
+        let (vo, vn) = (versions::folder(&p.dir, &from), versions::folder(&p.dir, to));
+        if vo.is_dir() && !vn.exists() {
+            let _ = std::fs::rename(vo, vn);
+        }
+        let f = settings_path(p);
+        let mut ps: ProjectSettings = load(&f);
+        ps.unnamed.retain(|u| u != &from);
+        if let Some(url) = ps.chat.remove(&from) {
+            ps.chat.insert(to.to_string(), url);
+        }
+        store(&f, &ps);
+        let mut gs: GlobalSettings = load(&self.o.settings);
+        let old = p.entry.to_string_lossy().into_owned();
+        gs.recent.retain(|r| r != &old);
+        store(&self.o.settings, &gs);
+        self.open(&new.to_string_lossy())?;
+        self.post(json!({"type": "info", "message": t!("wizard.renamed", from, to)}));
+        Ok(())
+    }
+}
+
+/// Writes a new script at p: an app (with ui/index.html) or a script;
+/// placeholder: only a note that the AI's answer replaces it.
+fn write_template(p: &Path, app: bool, placeholder: bool) -> Result<()> {
+    let title = p.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
+    if app {
+        write_text(p, &format!(
+            "// ==xljs==\n// @mode   app\n// @html   ui/index.html\n// @assets ui/\n// @title  {title}\n// ==/xljs==\n\n// {}\nexport function hello() {{\n  return \"{}\";\n}}\n",
+            t!("dev.templateAppComment"),
+            t!("dev.templateHello"),
+        ))?;
+        let html = p.parent().unwrap_or(Path::new(".")).join("ui").join("index.html");
+        if !html.exists() {
+            write_text(&html, &format!(
+                "<!doctype html>\n<html lang=\"{}\">\n<head>\n<meta charset=\"utf-8\">\n<title>{title}</title>\n</head>\n<body>\n  <h1>{title}</h1>\n  <button data-action=\"hello\" data-result=\"message\">OK</button>\n  <p data-bind=\"message\"></p>\n</body>\n</html>\n",
+                i18n::lang()
+            ))?;
+        }
+    } else if placeholder {
+        write_text(p, &wizard::placeholder(&title))?;
+    } else {
+        write_text(p, &format!("// ==xljs==\n// @title {title}\n// ==/xljs==\n\nalert(\"{}\");\n", t!("dev.templateHello")))?;
+    }
+    Ok(())
+}
+
+impl Session {
 
     fn browser_event(&mut self, b: BrowserEvent) {
         match b {
@@ -570,12 +683,22 @@ impl Session {
             Some(t) => read_text(&p.path(t)?).ok(),
             None => None,
         };
+        // A script with a temporary name takes the name of the AI's file.
+        let ps: ProjectSettings = load(&settings_path(p));
+        let entry = p.entry_name();
+        let rename = (target.as_deref() == Some(entry.as_str()) && ps.unnamed.contains(&entry) && project::is_script(name))
+            .then(|| {
+                let ext = project::ext_of(name);
+                format!("{}.{ext}", project::base_stem(name).trim())
+            })
+            .filter(|n| n != &entry && !n.starts_with('.') && !p.dir.join(n).exists() && p.path(n).is_ok());
         self.post(json!({
             "type": "download",
             "name": name,
             "text": text,
             "target": target,
             "old": old,
+            "rename": rename,
             "files": p.files(),
         }));
         Ok(())
@@ -670,6 +793,21 @@ impl Session {
             r.run.kill();
         }
     }
+}
+
+/// Where the wizard proposes to create scripts: the folder of the last
+/// script, else the documents folder.
+fn default_dir(gs: &GlobalSettings) -> String {
+    if let Some(d) = gs.recent.iter().filter_map(|r| Path::new(r).parent()).find(|d| d.is_dir()) {
+        return d.to_string_lossy().into_owned();
+    }
+    let home = std::env::var_os("USERPROFILE").or_else(|| std::env::var_os("HOME")).map(PathBuf::from).unwrap_or_default();
+    let docs = home.join("Documents");
+    if docs.is_dir() { docs } else { home }.to_string_lossy().into_owned()
+}
+
+fn settings_path(p: &Project) -> PathBuf {
+    p.dir.join(project::DATA_DIR).join("dev.json")
 }
 
 /// The texts of the page (the keys under "devPage." without the prefix).
