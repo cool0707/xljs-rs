@@ -15,6 +15,8 @@
   const icon = (cls) => el("i", { className: cls });
   const fmt = (s, ...args) => String(s).replace(/\{(\d+)\}/g, (m, i) => (args[i] === undefined ? m : args[i]));
   const send = (m) => { if (wv) wv.postMessage(JSON.stringify(m)); };
+  // Dropped files reach Rust as paths (WebView2 113+).
+  const canAttach = !!(wv && typeof wv.postMessageWithAdditionalObjects === "function");
 
   let L = {}; // texts
   const st = {
@@ -30,6 +32,32 @@
     failure: null, // the last failed run: { prompt, location }
     layout: { mode: "both", swap: false, split: 0.42 },
   };
+
+  // ------------------------------------------------------------ drop
+
+  // A script dropped on the window is opened (Rust checks what it is).
+  function initDrop() {
+    const hasFiles = (e) => canAttach && e.dataTransfer && Array.from(e.dataTransfer.types || []).includes("Files");
+    let depth = 0;
+    const over = (on) => document.body.classList.toggle("drop-over", on);
+    document.addEventListener("dragenter", (e) => { if (hasFiles(e)) { depth++; over(true); } });
+    document.addEventListener("dragleave", (e) => { if (hasFiles(e) && --depth <= 0) { depth = 0; over(false); } });
+    document.addEventListener("dragover", (e) => {
+      // Dropping must never replace the page.
+      e.preventDefault();
+      e.dataTransfer.dropEffect = hasFiles(e) ? "copy" : "none";
+    });
+    document.addEventListener("drop", (e) => {
+      e.preventDefault();
+      depth = 0;
+      over(false);
+      if (!hasFiles(e)) return;
+      const files = Array.from(e.dataTransfer.files || []);
+      if (!files.length) return;
+      save();
+      wv.postMessageWithAdditionalObjects(JSON.stringify({ op: "drop" }), files);
+    });
+  }
 
   // ------------------------------------------------------------ layout
 
@@ -653,6 +681,7 @@
         L = m.texts || {};
         for (const e of document.querySelectorAll("[data-t]")) e.textContent = L[e.dataset.t] || e.dataset.t;
         for (const e of document.querySelectorAll("[data-tip]")) e.title = L[e.dataset.tip] || "";
+        document.body.dataset.dropHint = L.dropHint || "";
         $("chat-url").placeholder = L.urlPlaceholder;
         $("chat-url-start").placeholder = L.urlPlaceholder;
         document.documentElement.lang = m.lang || "ja";
@@ -794,8 +823,7 @@
     // Edited elsewhere (Notepad...) while nothing is unsaved here: reload.
     if (st.project && !st.dirty && st.file && !st.wantEditor) { st.reloadCheck = true; send({ op: "read", file: st.file }); }
   });
-  document.addEventListener("dragover", (e) => e.preventDefault());
-  document.addEventListener("drop", (e) => e.preventDefault());
+  initDrop();
   if (wv) {
     wv.addEventListener("message", (e) => {
       if (typeof e.data !== "string" || e.data[0] !== "\x02") return;

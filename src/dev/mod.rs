@@ -273,7 +273,7 @@ impl Session {
         self.project.as_ref().ok_or_else(|| err!("dev.noScript"))
     }
 
-    fn request(&mut self, r: Request, _files: Vec<String>) -> Result<()> {
+    fn request(&mut self, r: Request, files: Vec<String>) -> Result<()> {
         match r.op.as_str() {
             "ready" => {
                 self.ready = true;
@@ -295,6 +295,7 @@ impl Session {
                     self.open(&r.path)?;
                 }
             }
+            "drop" => self.drop(&files)?,
             "new" => self.create(r.app)?,
             "read" => {
                 let p = self.project()?;
@@ -474,6 +475,23 @@ impl Session {
             && let Err(e) = self.open(&p)
         {
             self.fail(&e);
+        }
+    }
+
+    /// Files dropped on the window: the first script is opened (a folder:
+    /// choose a script in it).
+    fn drop(&mut self, files: &[String]) -> Result<()> {
+        let files: Vec<&String> = files.iter().filter(|f| !f.is_empty()).collect();
+        if let Some(d) = files.iter().find(|f| Path::new(f.as_str()).is_dir()) {
+            self.open_dialog(d);
+            return Ok(());
+        }
+        match files.iter().find(|f| is_script(f)) {
+            Some(f) => self.open(f),
+            None => match files.first() {
+                Some(f) => Err(err!("dev.dropNotScript", Path::new(f.as_str()).file_name().map(|n| n.to_string_lossy()).unwrap_or_default())),
+                None => Ok(()),
+            },
         }
     }
 
@@ -808,6 +826,12 @@ fn default_dir(gs: &GlobalSettings) -> String {
 
 fn settings_path(p: &Project) -> PathBuf {
     p.dir.join(project::DATA_DIR).join("dev.json")
+}
+
+/// Whether a path names a script that can be opened (.js, .mjs, .ts).
+fn is_script(path: &str) -> bool {
+    let ext = Path::new(path).extension().map(|e| e.to_string_lossy().to_lowercase()).unwrap_or_default();
+    matches!(ext.as_str(), "js" | "mjs" | "ts")
 }
 
 /// The texts of the page (the keys under "devPage." without the prefix).

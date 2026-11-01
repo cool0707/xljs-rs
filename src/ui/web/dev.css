@@ -167,3 +167,14 @@ footer { padding: 4px 12px; }
 .book-list li { margin: 2px 0; }
 .book-list .err { color: var(--error); }
 .small-links .link { margin-left: 8px; }
+
+/* A file dragged over the window (dev.js initDrop). */
+body.drop-over::after {
+  content: attr(data-drop-hint);
+  position: fixed; inset: 8px; z-index: 1000; pointer-events: none;
+  display: flex; align-items: center; justify-content: center;
+  border: 3px dashed var(--accent); border-radius: 8px;
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--accent); font-size: 18px; font-weight: bold;
+}
+body.drop-over iframe { pointer-events: none; }

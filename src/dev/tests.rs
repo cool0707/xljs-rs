@@ -247,6 +247,27 @@ fn chat_follows_the_script() {
     assert_eq!(w.take("project")[0]["chat"], "");
 }
 
+#[test]
+fn dropped_files_open_the_script() {
+    let _l = lock_lang("ja");
+    let dir = tempdir();
+    write(&dir, "a.js", "1");
+    write(&dir, "data.csv", "x");
+    let path = |n: &str| dir.join(n).to_string_lossy().into_owned();
+    let (mut s, w, _rx) = session(&dir, "{}");
+    page(&mut s, json!({"op": "ready"}));
+    let drop = |s: &mut Session, files: Vec<String>| assert!(s.event(Event::Page(json!({"op": "drop"}).to_string(), files)));
+    // The first script among the files (paths not available are "").
+    drop(&mut s, vec![String::new(), path("data.csv"), path("a.js")]);
+    assert_eq!(w.take("project")[0]["entry"], "a.js");
+    // Not a script: an error, and the script stays open.
+    drop(&mut s, vec![path("data.csv")]);
+    assert!(w.take("error")[0]["message"].as_str().unwrap().contains("data.csv"));
+    assert_eq!(s.current, "a.js");
+    drop(&mut s, vec![]);
+    assert!(w.take("error").is_empty());
+}
+
 /// A finished run (a process that ends at once).
 fn fake_run(dir: &Path) -> Run {
     let (tx, _rx) = mpsc::channel::<RunEvent>();
