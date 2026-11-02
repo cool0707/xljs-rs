@@ -39,7 +39,7 @@
     });
     const t = session.t;
     const labels = {};
-    for (const k of ["ready", "running", "finished", "failed", "close", "hint", "breakFirst", "run"]) labels[k] = t("debug." + k, "{0}");
+    for (const k of ["running", "finished", "failed", "close", "hint"]) labels[k] = t("debug." + k, "{0}");
     postMessage({ type: "ready", labels, title: t("debug.windowTitle", xljs.title), script: xljs.script });
   }
 

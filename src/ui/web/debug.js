@@ -301,14 +301,14 @@
       /** A rejection noted with rejected() got a handler after all. */
       handled(promise) { unhandled.delete(promise); },
       /** Runs the script; with breakFirst the debugger stops on its first
-       * line of code (the bundle checks the flag there, see insert_break in
-       * src/engine/bundle.rs). */
+       * line of code (the bundle loops on breakCheck there, see insert_break
+       * in src/engine/bundle.rs). */
       run(breakFirst) {
         if (started) return;
         started = true;
         status("running");
         if (native.appMode) native.openMain();
-        G.__xljsBreakFirst = !!breakFirst;
+        G.__xljsBreakCheck = breakChecker(!!breakFirst);
         const done = G.__xljsMain(native.setExports);
         done.then(
           () => { settled = true; check(); },
@@ -319,6 +319,40 @@
           });
         check();
       },
+    };
+  }
+
+  /** The check of `while (check()) debugger;` on the script's first line.
+   * The run starts as the window opens, before the developer tools have
+   * attached to the worker (until then `debugger` does nothing): it stays
+   * true, sleeping a little each time, until the debugger has stopped there
+   * (a long time since the last check) or BREAK_WAIT has passed (no tools). */
+  const BREAK_WAIT = 15000;
+  function breakChecker(on) {
+    let start = 0;
+    let last = 0;
+    const nap = (() => {
+      try {
+        const a = new Int32Array(new SharedArrayBuffer(4));
+        return (ms) => Atomics.wait(a, 0, 0, ms);
+      } catch {
+        return () => {};
+      }
+    })();
+    return () => {
+      if (!on) return false;
+      const now = Date.now();
+      if (start === 0) {
+        start = last = now;
+        return true;
+      }
+      if (now - last > 200 || now - start > BREAK_WAIT) {
+        on = false;
+        return false;
+      }
+      nap(20);
+      last = Date.now();
+      return true;
     };
   }
 

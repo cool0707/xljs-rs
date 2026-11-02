@@ -1,8 +1,6 @@
 main { flex: 1; overflow: auto; padding: 16px 20px 8px; }
 h1 { margin: 0 0 8px; font-size: 16px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #hint { margin: 0 0 12px; color: var(--muted); white-space: pre-wrap; }
-.check { display: inline-flex; align-items: center; gap: 6px; }
-input[type=checkbox] { margin: 0; width: 16px; height: 16px; accent-color: var(--accent); }
 #error {
   margin: 12px 0 0;
   padding: 6px 8px;

@@ -41,8 +41,6 @@
     switch (state) {
       case "running":
         setStatus(L.running);
-        $("run").disabled = true;
-        $("break-first").disabled = true;
         break;
       case "done":
         if (detail.error) {
@@ -51,10 +49,10 @@
         } else {
           setStatus(fmt(L.finished, detail.code), "ok");
         }
-        $("run").textContent = L.close;
-        $("run").disabled = false;
-        $("run").onclick = () => wv.postMessage("close");
-        $("run").focus();
+        $("close").textContent = L.close;
+        $("close").hidden = false;
+        $("close").onclick = () => wv.postMessage("close");
+        $("close").focus();
         if (autorun) wv.postMessage("close");
         break;
     }
@@ -131,32 +129,14 @@
         document.title = m.title;
         $("name").textContent = m.script;
         $("hint").textContent = L.hint;
-        $("break-first-label").textContent = L.breakFirst;
-        $("run").textContent = L.run;
-        $("run").disabled = false;
-        // On by default and remembered (never with ?autorun).
-        $("break-first").checked = !autorun && remembered() !== "0";
-        $("break-first").onchange = () => remember($("break-first").checked ? "1" : "0");
-        $("run").onclick = () => worker.postMessage({ type: "run", breakFirst: $("break-first").checked });
-        $("run").focus();
-        setStatus(L.ready);
-        if (autorun) $("run").click();
+        // Runs at once, pausing on the script's first line (not with ?autorun).
+        worker.postMessage({ type: "run", breakFirst: !autorun });
         break;
     }
   };
 
-  function remembered() {
-    try { return localStorage.getItem("xljs.debug.breakFirst"); } catch { return null; }
-  }
-  function remember(v) {
-    try { localStorage.setItem("xljs.debug.breakFirst", v); } catch { /* not kept */ }
-  }
-
   document.addEventListener("keydown", (e) => {
-    if (e.key === "F5" || (e.ctrlKey && (e.key === "r" || e.key === "R"))) {
-      // No reload (see debug.reloaded); F5 runs.
-      e.preventDefault();
-      if (e.key === "F5" && !$("run").disabled) $("run").click();
-    }
+    // No reload (see debug.reloaded).
+    if (e.key === "F5" || (e.ctrlKey && (e.key === "r" || e.key === "R"))) e.preventDefault();
   });
 })();
