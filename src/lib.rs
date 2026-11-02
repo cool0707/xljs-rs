@@ -5,6 +5,7 @@
 pub mod ad;
 pub mod api;
 pub mod cli;
+pub mod db;
 pub mod dev;
 pub mod engine;
 pub mod pdf;

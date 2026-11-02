@@ -7,6 +7,7 @@ Excel 未インストール環境で動くこと、日本語環境での使い�
 
 HTML UI・フォーム・表表示・デバッガの設計は `docs/handoff-ui.md`（Go 版で書かれたメモ。仕組みは同じ）を参照。
 グラフ・ガントチャート（`ui.chart`・フォームの `chart` 項目・`xljs.chart`、AG Charts / Frappe Gantt、Excel のグラフ `sheet.charts` からの変換）は `docs/charts-design.md`。
+SQLite（`sqlite.open`、ファイルサーバーで複数人が使う共有モード・ロックファイル・自動バックアップと変更ログ・修復）は `docs/sqlite-design.md`。
 PDF 出力（`book.toPdf`・`sheet.toPdf`・`xljs.htmlToPdf`。シートの印刷レイアウトを HTML にして WebView2 の `Page.printToPDF`）は `docs/pdf-design.md`。
 PDF の編集（グローバルの `pdf`: 結合・ページの削除・挿入・回転・文字の追加。lopdf ＋ フォントのサブセット埋め込み）は `docs/pdf-edit.md`。
 開発モード（`xljs dev`。AI チャットの枠＝2 つ目の WebView2、ダウンロードの差分と置き換え、`.xljs/versions` の履歴、別プロセスでの実行、エラーの場所と AI への依頼文、フォームのプレビュー、CodeMirror のエディタと d.ts からの補完）は `docs/dev-mode.md`。
@@ -15,7 +16,7 @@ PDF の編集（グローバルの `pdf`: 結合・ページの削除・挿入�
 
 | パス | 役割 |
 |---|---|
-| `src/main.rs`, `src/cli` | CLI。グローバルフラグ（`--ui` `--ui-answers` `--lang` `--debug`、Go の flag と同じ書式）→ サブコマンド（pack/check/init/vba/dev/version/help。スクリプトの代わりにブックを渡すと VBA の取り出し。引数なしは `launch.rs` の開始画面＝`Ui::choose`。アイコンは `src/cli/icons/*.ico`）→ メタデータを読んで `ui::run` でスクリプト実行。`console.rs` はコンソールへの接続（GUI 版） |
+| `src/main.rs`, `src/cli` | CLI。グローバルフラグ（`--ui` `--ui-answers` `--lang` `--debug`、Go の flag と同じ書式）→ サブコマンド（pack/check/init/vba/dev/repair/version/help。スクリプトの代わりにブックを渡すと VBA の取り出し、`.db` を渡すと検査と修復。引数なしは `launch.rs` の開始画面＝`Ui::choose`。アイコンは `src/cli/icons/*.ico`）→ メタデータを読んで `ui::run` でスクリプト実行。`console.rs` はコンソールへの接続（GUI 版） |
 | `src/engine` | `bundle.rs`: oxc で TS 変換 → module runner 変換（import を `await __vite_ssr_import__`、export を getter に）→ モジュールごとの async 関数を 1 つの式にまとめ、インラインのソースマップを付ける（CommonJS・JSON・.txt・node_modules も解決）。`mod.rs`: QuickJS（rquickjs）で実行、`Error.prepareStackTrace` でスタックを元のファイルに対応付け。`loop_.rs` はタイマーと他スレッドからの post。`debug.rs` は `--debug` のデバッグセッション（後述） |
 | `src/api` | Rust 側ネイティブ関数（`N::set("name", |host, args| ...)` で natives オブジェクトに登録）と `prelude.js`（Go 版から移したもの。公開 API をすべて JS で組み立てる）。Rust→JS は `native.xxx` 経由のみ。`Host` がスクリプト実行中の状態（Env、ループ、ブック、保持中の JS 値）。`xlsx.rs`/`xlsx_style.rs` は umya-spreadsheet、`xlsx_calc.rs` は `cell.calc()` の簡易計算、`xlsx_chart.rs` はブック内の Excel のグラフの読み取り、`xlsx_print.rs` は印刷レイアウト（ページ設定・改ページ → HTML）、`xlsx_shape.rs` は印刷用の図形・テキストボックス・画像（描画の XML → HTML/SVG）、`numfmt.rs` は表示書式。`gopath.rs` は Go の filepath と同じ意味のパス関数。`remote.rs` はデバッガ用のワイヤ形式 |
 | `src/ui` | `Ui` トレイトと実装: `native`（Windows のみ。Win32 ダイアログ、IFileDialog、IProgressDialog、WebView2 ウィンドウ。`loader.rs` は WebView2Loader.dll なしでランタイムを読み込む）、`Console`、`Mock`（応答 JSON＋ログ。テスト用）。`thread.rs` の `ui::run` がスクリプトを専用スレッドで動かし、UI 呼び出しを呼び出し元（main スレッド）へ転送する。`web/` は組み込みページ（Go 版から移したもの）（`build.rs` が埋め込みリストを生成）。`web/chart.js` はグラフの共通アダプタ、`web/print.html` は PDF 出力のページ（`Ui::print_pdf` が見えないウィンドウで開く）、`web/vendor/` は同梱ライブラリ（AG Charts Community・Frappe Gantt・CodeMirror（`tools/codemirror` でバンドル）。版は `VERSIONS.md`） |
@@ -23,6 +24,7 @@ PDF の編集（グローバルの `pdf`: 結合・ページの削除・挿入�
 | `src/ad` | Active Directory（グローバルの `ad`。natives は `src/api/ad.rs`）。`Directory` トレイトの裏が Windows では wldap32（`ldap.rs`。サインイン中のユーザーで Negotiate バインド、ページング検索）、テストでは `testdata/ad/directory.json` の偽ディレクトリ（`fake.rs`。`filter.rs` の評価器でフィルタを解く）。`mod.rs` がオプション → LDAP フィルタ（Search-ADAccount 相当の条件も）と結果のオブジェクト化、`value.rs` が値の変換（FILETIME・generalized time → Date、SID・GUID → 文字列） |
 | `src/pdf` | PDF の編集（グローバルの `pdf`。natives は `src/api/pdf.rs`）。`mod.rs` が lopdf で読んだ文書のページの木を平らにし（継承される属性を各ページへ）、ページの取り込み（参照先のオブジェクトをたどってコピー）・削除・回転・文字の追加（表示の向きの座標 → ページの座標）。`font.rs` がフォントを名前・パスから探し（Windows の主なフォントはファイル名の表、ほかはフォントフォルダの name テーブル）、使った字だけを subsetter で埋め込む（Type0 / Identity-H ＋ ToUnicode）。テスト用の PDF は `testdata/pdf/`（`make_pdf.py`） |
 | `src/meta` | エントリ先頭の `// ==xljs==` メタデータのパースと、アセットだけを見せる `AssetFs`（`DirAssets`/`MemAssets`） |
+| `src/db` | SQLite（rusqlite の bundled）。`Db` はローカル / 共有の 2 モード。`lock.rs` は共有モードのロックファイル（Windows は sharing mode）、`share.rs` は隣の `<file>.xljs-shared` フォルダ（自動バックアップ・変更ログ）、`repair.rs` は検査と修復。natives は `src/api/sqlite.rs`、CLI は `src/cli/db.rs`（`xljs repair`・`.db` のドロップ） |
 | `src/vba` | マクロブックの VBA ソースの読み取り（cfb で `vbaProject.bin` / `_VBA_PROJECT_CUR` を開き、MS-OVBA の解凍）。テスト用の固定データは `testdata/vba/`（Go 版のテスト用ビルダーで生成したもの） |
 | `src/i18n` | メッセージ。`locales/<lang>.json` を `include_str!`。`en.json` が基準・フォールバック |
 | `src/pack` | exe 末尾へのスクリプト埋め込み。v2 = `[zip(manifest.json, main.js, assets/...)][len u64]["XLJSPAK2"]`、v1 も読める |

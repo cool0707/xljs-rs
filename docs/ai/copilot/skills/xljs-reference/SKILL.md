@@ -269,6 +269,27 @@ fs.writeJSON(dest, rows, { space: 0 });            // 1 行で
 fs.writeJSONL(dest, rows);                         // 1 行 1 レコード
 ```
 
+## SQLite データベース
+
+```js
+const db = sqlite.open("受注.db");          // なければ作る
+db.exec("CREATE TABLE IF NOT EXISTS 受注 (番号 TEXT PRIMARY KEY, 日付 DATE, 得意先 TEXT, 金額 INTEGER)");
+db.run("INSERT INTO 受注 VALUES (?, ?, ?, ?)", "A001", new Date(2026, 3, 1), "山田商店", 12000);
+db.run("UPDATE 受注 SET 金額 = :金額 WHERE 番号 = :番号", { 番号: "A001", 金額: 15000 });
+const rows = db.all("SELECT * FROM 受注 WHERE 日付 >= ?", new Date(2026, 3, 1)); // オブジェクトの配列
+const one = db.get("SELECT sum(金額) AS 合計 FROM 受注");                         // 最初の行か null
+db.insert("受注", workbooks.open(h).sheet(0).toObjects(), { replace: true });   // まとめて挿入（1 トランザクション）
+db.transaction(() => {                     // 例外なら取り消し。async にはできない
+  db.run("DELETE FROM 受注 WHERE 金額 = 0");
+});
+db.close();
+```
+
+- 値: `Date` はローカル時刻の文字列（0 時ちょうどなら `"2026-04-01"`、それ以外は `"2026-04-01 09:30:00"`）で保存し、型を `DATE`・`DATETIME` と宣言した列は `Date` で読める。`BOOLEAN` の列は `true`/`false`。BLOB は `Uint8Array`。`CURRENT_TIMESTAMP` は UTC なので、日時の既定値は `datetime('now', 'localtime')` を使う。
+- `db.insert(table, rows)` はテーブルがなければ値から列の型を決めて作る。`values(sql)` は配列の配列、`tables`・`columns(table)`・`check()`・`backup(dest)` もある。
+- **共有モード**（ファイルサーバーに置いて複数人で使う）: `sqlite.open(p, { shared: true })`。ネットワークドライブ・`\\server\share` 上なら自動で共有モードになる。呼び出しのたびにファイルを開いてロックを取り、すぐ閉じる（遅いが壊れにくい）。他の人の書き込み中は最大 `timeout`（既定 30 秒）待つ。書き込みの前に 1 時間ごとに検査と自動バックアップをし、変更をすべて記録する。トランザクションの中で `confirm` など人を待つ処理をしない。
+- 壊れたときは、次の呼び出しで「修復しますか？」と聞かれ、はいなら修復してやり直す（`onCorrupt: "repair"` で確認なし、`"error"` で例外）。修復は 索引の作り直し → 自動バックアップ＋その後の変更の再実行 → 読める行だけで作り直し の順に試し、壊れたファイルは残す。`sqlite.repair(p)` / `db.repair()` で明示的にも実行でき、データベースのファイルを xljs.exe にドロップしても修復できる。
+
 ## 進捗表示
 
 ```js

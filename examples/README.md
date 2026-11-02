@@ -13,6 +13,7 @@
 | `chart-gantt.js` | ガントチャート | 工程表をフォームの中にガントチャートで表示し、ドラッグで変えた日付をブックに保存する（`type: "chart"`・`editable`・`holidays`・進捗線・出来高累計曲線） |
 | `app-hello/` | アプリ（HTML の画面） | 最小のアプリ。フォームの値を export した関数に渡し、結果を表示する（`@mode app`・`data-action`・`data-bind`） |
 | `app-aggregate/` | アプリ（HTML の画面） | フォルダ選択 → 集計 → 進捗 → 結果の表 → 保存。ドロップ・中止・画面の関数呼び出しも使う（`win.state`・`win.invoke`・`xljs.invoke`） |
+| `sqlite-shared-orders.js` | SQLite（共有モード） | ファイルサーバー上のデータベースに Excel の受注を取り込み、集計して表示する（`sqlite.open`・`db.insert`・`db.all`・自動バックアップ） |
 | `csv-to-xlsx.js` | CSV → Excel | CSV（Shift_JIS / UTF-8 自動判定）を Excel ブックに変換する |
 | `xlsx-to-json.js` | Excel → JSON | Excel の先頭シートを JSON / JSON Lines に書き出す |
 | `xlsx-to-pdf.js` | Excel → PDF | Excel ファイルを印刷したときと同じページ設定・グラフ付きで PDF にする（`book.toPdf`） |

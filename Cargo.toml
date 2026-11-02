@@ -39,6 +39,7 @@ walkdir = "2"
 chrono = "0.4"
 ctrlc = "3"
 rpassword = "7"
+rusqlite = { version = "0.41", features = ["bundled", "backup", "column_decltype"] }
 lopdf = { version = "0.46", default-features = false }
 ttf-parser = "0.25"
 subsetter = { version = "0.2", default-features = false }

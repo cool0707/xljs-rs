@@ -3871,6 +3871,223 @@
   };
   defineGlobal("workbooks", workbooksObj);
 
+  // ---------------------------------------------------------------- sqlite
+
+  const isBytes = (v) => v instanceof ArrayBuffer || ArrayBuffer.isView(v);
+  const sqlValue = (v) => (isDayjs(v) ? v.toDate() : v);
+  const sqlIdent = (s) => '"' + String(s).replace(/"/g, '""') + '"';
+  const isNamedParams = (v) => v !== null && typeof v === "object" && !Array.isArray(v) && !(v instanceof Date) && !isDayjs(v) && !isBytes(v);
+  /** run(sql, a, b) / run(sql, [a, b]) / run(sql, { name: a }) */
+  function sqlParams(args) {
+    if (args.length === 1 && Array.isArray(args[0])) return args[0].map(sqlValue);
+    if (args.length === 1 && isNamedParams(args[0])) {
+      const o = {};
+      for (const k of Object.keys(args[0])) o[k] = sqlValue(args[0][k]);
+      return o;
+    }
+    return args.map(sqlValue);
+  }
+  /** "YYYY-MM-DD HH:MM:SS" (local) to a Date. */
+  function sqlLocalDate(s) {
+    const m = /^(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2}):(\d{2})$/.exec(String(s || ""));
+    return m ? new Date(+m[1], m[2] - 1, +m[3], +m[4], +m[5], +m[6]) : null;
+  }
+  function repairReport(json) {
+    const r = JSON.parse(json);
+    const tables = {};
+    for (const [name, rows] of r.tables) tables[name] = rows;
+    return { status: r.status, method: r.method, problems: r.problems, backup: sqlLocalDate(r.backup), replayed: r.replayed,
+      skipped: r.skipped, tables, notes: r.notes, broken: r.broken };
+  }
+  function repairMessage(path, r) {
+    if (r.status === "ok") return T("sqlite.notDamaged", path);
+    const lines = [T(`sqlite.repaired.${r.method}`, path, r.backup ? formatDateLocal(r.backup, false) : "", r.replayed, r.skipped)];
+    if (r.notes.length) lines.push("", ...r.notes);
+    if (r.broken) lines.push("", T("sqlite.brokenKept", r.broken));
+    return lines.join("\n");
+  }
+  /** The type of a new column from its values (DATE, DATETIME, INTEGER, REAL, BOOLEAN, TEXT, BLOB or none). */
+  function sqlColumnType(values) {
+    let t = null;
+    for (const v0 of values) {
+      const v = sqlValue(v0);
+      if (v === null || v === undefined || v === "") continue;
+      let k;
+      if (v instanceof Date) k = v.getHours() || v.getMinutes() || v.getSeconds() || v.getMilliseconds() ? "DATETIME" : "DATE";
+      else if (typeof v === "boolean") k = "BOOLEAN";
+      else if (typeof v === "bigint") k = "INTEGER";
+      else if (typeof v === "number") k = Number.isInteger(v) ? "INTEGER" : "REAL";
+      else if (isBytes(v)) k = "BLOB";
+      else k = "TEXT";
+      if (t === null || t === k) t = k;
+      else if ((t === "INTEGER" || t === "REAL") && (k === "INTEGER" || k === "REAL")) t = "REAL";
+      else if ((t === "DATE" || t === "DATETIME") && (k === "DATE" || k === "DATETIME")) t = "DATETIME";
+      else return "";
+    }
+    return t || "";
+  }
+  const ON_CORRUPT = ["ask", "repair", "error"];
+
+  class Database {
+    constructor(h, onCorrupt) {
+      define(this, "_h", h);
+      define(this, "_onCorrupt", onCorrupt);
+    }
+    get path() { return native.sqliteInfo(this._h).path; }
+    /** Whether the database is used in shared mode (on a file server). */
+    get shared() { return native.sqliteInfo(this._h).shared; }
+    get readonly() { return native.sqliteInfo(this._h).readonly; }
+    get inTransaction() { return native.sqliteInfo(this._h).inTransaction; }
+    /** Runs op; when it finds the database damaged, repairs it (asking first by default) and runs op again. */
+    _call(op) {
+      try {
+        return op();
+      } catch (e) {
+        let info;
+        try { info = native.sqliteInfo(this._h); } catch (_) { throw e; }
+        if (!info.corrupt || info.inTransaction || this._onCorrupt === "error") throw e;
+        if (this._onCorrupt === "ask" && !native.uiConfirm(title(), T("sqlite.askRepair", info.path, e && e.message))) throw e;
+        const r = this.repair();
+        const text = repairMessage(info.path, r);
+        if (this._onCorrupt === "ask") native.uiAlert(title(), text);
+        else native.stderr(text + "\n");
+        return op();
+      }
+    }
+    /** Runs SQL statements separated by semicolons (no parameters). */
+    exec(sql) {
+      this._call(() => native.sqliteExec(this._h, String(sql)));
+      return this;
+    }
+    /** Runs a statement: { changes, lastInsertRowid }. */
+    run(sql, ...params) { return this._call(() => native.sqliteRun(this._h, String(sql), sqlParams(params))); }
+    /** The rows of a query as objects. */
+    all(sql, ...params) { return this._call(() => native.sqliteQuery(this._h, String(sql), sqlParams(params), 0)); }
+    /** The first row of a query, or null. */
+    get(sql, ...params) { return this._call(() => native.sqliteQuery(this._h, String(sql), sqlParams(params), 1)); }
+    /** The rows of a query as arrays (without the column names). */
+    values(sql, ...params) { return this._call(() => native.sqliteQuery(this._h, String(sql), sqlParams(params), 2)); }
+    /** Runs fn in a transaction: committed when it returns, rolled back when it throws. fn must not be async. */
+    transaction(fn) {
+      if (typeof fn !== "function") throw new TypeError(T("engine.callbackNotFunction"));
+      return this._call(() => {
+        native.sqliteBegin(this._h);
+        let r;
+        try {
+          r = fn(this);
+          if (r && typeof r.then === "function") {
+            r.then(() => {}, () => {});
+            throw new Error(T("sqlite.asyncTransaction"));
+          }
+          native.sqliteCommit(this._h);
+        } catch (e) {
+          native.sqliteRollback(this._h);
+          throw e;
+        }
+        return r;
+      });
+    }
+    /**
+     * Inserts rows (objects, or arrays with options.columns) in one transaction and returns their number.
+     * A missing table is created with columns typed from the values. options: { columns, replace, ignore, create = true }
+     */
+    insert(table, rows, options = {}) {
+      rows = Array.from(rows || []);
+      if (rows.length === 0) return 0;
+      const name = String(table);
+      const exists = this.hasTable(name);
+      let cols = options.columns ? Array.from(options.columns, String) : null;
+      let data;
+      if (Array.isArray(rows[0])) {
+        if (!cols) cols = exists ? this.columns(name).map((c) => c.name).slice(0, rows[0].length) : rows[0].map((_, i) => `列${i + 1}`);
+        data = rows.map((r) => cols.map((_, i) => sqlValue(r[i])));
+      } else {
+        if (!cols) cols = keysOf(rows);
+        data = rows.map((r) => cols.map((c) => sqlValue(r == null ? null : r[c])));
+      }
+      const verb = options.replace ? "INSERT OR REPLACE" : options.ignore ? "INSERT OR IGNORE" : "INSERT";
+      return this.transaction(() => {
+        if (!exists && options.create !== false) {
+          const defs = cols.map((c, i) => {
+            const t = sqlColumnType(data.map((r) => r[i]));
+            return sqlIdent(c) + (t ? " " + t : "");
+          });
+          native.sqliteExec(this._h, `CREATE TABLE ${sqlIdent(name)} (${defs.join(", ")})`);
+        }
+        return native.sqliteInsert(this._h, name, cols, data, verb);
+      });
+    }
+    /** The names of the tables. */
+    get tables() {
+      return this.all("SELECT name FROM sqlite_schema WHERE type = 'table' AND name NOT LIKE 'sqlite\\_%' ESCAPE '\\' ORDER BY name").map((r) => r.name);
+    }
+    hasTable(name) {
+      return this.get("SELECT 1 AS x FROM sqlite_schema WHERE type IN ('table', 'view') AND name = ? COLLATE NOCASE", String(name)) !== null;
+    }
+    /** The columns of a table: [{ name, type, notNull, default, primaryKey }]. */
+    columns(table) {
+      return this.all('SELECT name, type, "notnull" AS nn, dflt_value AS def, pk FROM pragma_table_info(?)', String(table))
+        .map((c) => ({ name: c.name, type: c.type, notNull: !!c.nn, default: c.def, primaryKey: c.pk > 0 }));
+    }
+    /** Checks the whole file: { ok, problems }. */
+    check() {
+      let msgs;
+      try { msgs = native.sqliteCheck(this._h); } catch (e) { msgs = [String(e && e.message)]; }
+      const ok = msgs.length === 1 && msgs[0] === "ok";
+      return { ok, problems: ok ? [] : msgs };
+    }
+    /** Writes a consistent copy of the database to dest. */
+    backup(dest) {
+      native.sqliteBackup(this._h, toPath(dest, "backup()"));
+      return this;
+    }
+    /** The automatic backups of a shared database, oldest first. */
+    backups() { return sqliteObj.backups(this.path); }
+    /** Repairs the database if it is damaged (options.force: rebuild it anyway). */
+    repair(options = {}) { return repairReport(native.sqliteRepairDb(this._h, !!options.force)); }
+    close() { native.sqliteClose(this._h); }
+    [inspectSymbol]() {
+      const i = native.sqliteInfo(this._h);
+      return `Database { path: ${JSON.stringify(i.path)}, shared: ${i.shared}${i.closed ? ", closed" : ""} }`;
+    }
+  }
+
+  const sqliteObj = {
+    /**
+     * Opens (or creates) a SQLite database. options: { shared, readonly, create = true, timeout = 30000,
+     * backup: { interval = 60, keep = 10 } | false, onCorrupt: "ask" | "repair" | "error" }
+     */
+    open(src, options = {}) {
+      const o = options || {};
+      const onCorrupt = o.onCorrupt === undefined ? "ask" : String(o.onCorrupt);
+      if (!ON_CORRUPT.includes(onCorrupt)) throw new TypeError(T("sqlite.badOnCorrupt", onCorrupt));
+      const b = o.backup === false ? { keep: 0 } : o.backup || {};
+      const shared = o.shared === undefined || o.shared === null ? -1 : o.shared ? 1 : 0;
+      const h = native.sqliteOpen(toPath(src, "sqlite.open()"), shared, !!o.readonly, o.create !== false,
+        o.timeout === undefined ? 30000 : Number(o.timeout), b.interval === undefined ? 60 : Number(b.interval),
+        b.keep === undefined ? 10 : Number(b.keep));
+      return new Database(h, onCorrupt);
+    },
+    /** Checks a database file: { ok, problems }. */
+    check(src) {
+      const msgs = native.sqliteCheckFile(toPath(src, "sqlite.check()"));
+      const ok = msgs.length === 1 && msgs[0] === "ok";
+      return { ok, problems: ok ? [] : msgs };
+    },
+    /** Repairs a damaged database that is not open (options: { force, timeout }). */
+    repair(src, options = {}) {
+      return repairReport(native.sqliteRepair(toPath(src, "sqlite.repair()"), !!options.force,
+        options.timeout === undefined ? 30000 : Number(options.timeout)));
+    },
+    /** The automatic backups of a shared database: [{ generation, time, path }], oldest first. */
+    backups(src) {
+      return JSON.parse(native.sqliteBackups(toPath(src, "sqlite.backups()")))
+        .map((b) => ({ generation: b.generation, time: sqlLocalDate(b.time), path: b.path }));
+    },
+    Database,
+  };
+  defineGlobal("sqlite", sqliteObj);
+
   // ---------------------------------------------------------------- dayjs
 
   /**

@@ -1266,6 +1266,149 @@ declare global {
   }
   const csv: Csv;
 
+  // ------------------------------------------------------------------ sqlite
+
+  /**
+   * SQL に渡す値。Date はローカル時刻の文字列（0 時ちょうどなら "2026-04-01"、それ以外は
+   * "2026-04-01 09:30:00"）、boolean は 1/0、Uint8Array/ArrayBuffer は BLOB、
+   * オブジェクト・配列は JSON の文字列、null/undefined は NULL で保存される
+   */
+  type SqlValue = number | bigint | string | boolean | Date | Uint8Array | ArrayBuffer | object | null | undefined;
+  /** run(sql, a, b) / run(sql, [a, b]) / run(sql, { name: a })（:name, @name, $name） */
+  type SqlParams = SqlValue[] | [SqlValue[]] | [Record<string, SqlValue>];
+  /**
+   * 読み取った行。INTEGER（2^53 を超えると bigint）・REAL は number、TEXT は string、BLOB は Uint8Array。
+   * 型が DATE・DATETIME・TIMESTAMP など（DATE か TIME を含む）と宣言された列の日時の文字列は Date、
+   * BOOLEAN の列の 0/1 は false/true。同じ名前の列は 2 つめから id_2 のようになる
+   */
+  interface SqlRow {
+    [column: string]: any;
+  }
+
+  interface SqliteOpenOptions {
+    /**
+     * 共有モード（ファイルサーバーに置いて複数人で使う）。省略時は、すでに共有モードになっている
+     * （隣に「<ファイル名>.xljs-shared」フォルダがある）か、ネットワークドライブ・UNC パス上なら共有モード。
+     * 共有モードでは呼び出しのたびにファイルを開いてロックを取り、終わったら閉じる（遅くなるが壊れにくい）。
+     * 書き込みの前に定期的に検査とバックアップを行い、変更を記録しておくので、壊れても repair() で
+     * ほとんど失わずに復旧できる
+     */
+    shared?: boolean;
+    readonly?: boolean;
+    /** ファイルがなければ作る（既定 true） */
+    create?: boolean;
+    /** 他の人の読み書きが終わるのを待つ時間（ミリ秒、既定 30000） */
+    timeout?: number;
+    /** 共有モードの自動バックアップ: interval 分ごと（既定 60）に、最新 keep 個（既定 10）を残す。false でしない */
+    backup?: { interval?: number; keep?: number } | false;
+    /**
+     * 壊れていることがわかったとき: "ask"（既定。確認してから修復してやり直す）、
+     * "repair"（確認せずに修復してやり直す）、"error"（例外にする）
+     */
+    onCorrupt?: "ask" | "repair" | "error";
+  }
+
+  interface SqliteRunResult {
+    changes: number;
+    lastInsertRowid: number | bigint;
+  }
+
+  interface SqliteColumn {
+    name: string;
+    type: string;
+    notNull: boolean;
+    default: string | null;
+    primaryKey: boolean;
+  }
+
+  interface SqliteRepairReport {
+    /** "ok"（壊れていなかったので何もしていない）、"repaired"（修復した） */
+    status: "ok" | "repaired";
+    /**
+     * journal: 中断された書き込みの取り消し / reindex: 索引の作り直し / vacuum: ファイルの作り直し
+     * （以上はデータを失わない）/ backup: バックアップ＋その後の変更の再実行 /
+     * salvage: 読み取れる行だけで作り直し（壊れた部分の行は失われる）
+     */
+    method: "none" | "journal" | "reindex" | "vacuum" | "backup" | "salvage";
+    /** 修復前の検査で見つかった問題 */
+    problems: string[];
+    /** method が "backup" のとき、元にしたバックアップの時刻 */
+    backup: Date | null;
+    /** 再実行した変更（トランザクション）の数、再実行できなかった数 */
+    replayed: number;
+    skipped: number;
+    /** 修復後のテーブルごとの行数 */
+    tables: Record<string, number>;
+    /** 移せなかったものなど */
+    notes: string[];
+    /** 壊れたファイルを退避した場所 */
+    broken: string | null;
+  }
+
+  interface SqliteBackup {
+    generation: number;
+    time: Date;
+    path: string;
+  }
+
+  interface SqliteCheckResult {
+    ok: boolean;
+    problems: string[];
+  }
+
+  interface Database {
+    readonly path: string;
+    readonly shared: boolean;
+    readonly readonly: boolean;
+    readonly inTransaction: boolean;
+    /** セミコロンで区切った複数の SQL を実行する（パラメータなし） */
+    exec(sql: string): this;
+    /** INSERT・UPDATE・DELETE など */
+    run(sql: string, ...params: SqlParams): SqliteRunResult;
+    /** すべての行（オブジェクト） */
+    all<T = SqlRow>(sql: string, ...params: SqlParams): T[];
+    /** 最初の行。なければ null */
+    get<T = SqlRow>(sql: string, ...params: SqlParams): T | null;
+    /** すべての行（列の値の配列。見出しなし） */
+    values(sql: string, ...params: SqlParams): any[][];
+    /**
+     * fn をトランザクションの中で実行する。例外なら取り消し（入れ子にもできる）。fn の戻り値を返す。
+     * fn は async にできない（共有モードでは実行中ほかの人を待たせるため、確認ダイアログなども入れないこと）
+     */
+    transaction<T>(fn: (db: Database) => T): T;
+    /**
+     * 行（オブジェクト、または columns を指定して配列）をまとめて挿入し、件数を返す。
+     * テーブルがなければ値から列の型を決めて作る（create: false で作らない）。
+     * replace: 主キーが同じ行を置き換える、ignore: 主キーが同じ行は飛ばす
+     */
+    insert(table: string, rows: Iterable<Row | unknown[]>, options?: { columns?: string[]; replace?: boolean; ignore?: boolean; create?: boolean }): number;
+    readonly tables: string[];
+    hasTable(name: string): boolean;
+    columns(table: string): SqliteColumn[];
+    /** ファイル全体を検査する */
+    check(): SqliteCheckResult;
+    /** 使用中でも一貫したコピーを dest に書き出す */
+    backup(dest: PathLike): this;
+    /** 共有モードの自動バックアップ（古い順） */
+    backups(): SqliteBackup[];
+    /** 壊れていれば修復する（force: 壊れていなくても作り直す） */
+    repair(options?: { force?: boolean }): SqliteRepairReport;
+    close(): void;
+  }
+
+  interface Sqlite {
+    /** SQLite のデータベースを開く（なければ作る） */
+    open(src: PathLike, options?: SqliteOpenOptions): Database;
+    /** 開かずにファイルを検査する */
+    check(src: PathLike): SqliteCheckResult;
+    /** 開いていないデータベースを修復する。壊れたファイルは残しておく */
+    repair(src: PathLike, options?: { force?: boolean; timeout?: number }): SqliteRepairReport;
+    /** 共有モードの自動バックアップ（古い順） */
+    backups(src: PathLike): SqliteBackup[];
+    Database: { prototype: Database };
+  }
+  const sqlite: Sqlite;
+
   // ------------------------------------------------------------------ workbooks
 
   type CellValue = number | string | boolean | Date | null;

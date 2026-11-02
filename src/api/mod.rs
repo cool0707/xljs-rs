@@ -10,6 +10,7 @@ mod encoding;
 mod fs;
 mod numfmt;
 mod pdf;
+mod sqlite;
 mod xlsx_calc;
 pub(crate) mod gopath;
 pub(crate) mod js;
@@ -89,6 +90,7 @@ pub struct Host {
     next_id: Cell<u64>,
     pub(crate) books: RefCell<HashMap<u64, xlsx::Book>>,
     pub(crate) pdfs: RefCell<HashMap<u64, crate::pdf::PdfDoc>>,
+    pub(crate) dbs: RefCell<HashMap<u64, crate::db::Db>>,
     callbacks: RefCell<HashMap<u64, Persistent<Function<'static>>>>,
     values: RefCell<HashMap<u64, Persistent<Value<'static>>>>,
     natives: RefCell<Option<Persistent<Object<'static>>>>,
@@ -113,6 +115,7 @@ impl Host {
             next_id: Cell::new(0),
             books: RefCell::new(HashMap::new()),
             pdfs: RefCell::new(HashMap::new()),
+            dbs: RefCell::new(HashMap::new()),
             callbacks: RefCell::new(HashMap::new()),
             values: RefCell::new(HashMap::new()),
             natives: RefCell::new(None),
@@ -156,6 +159,10 @@ impl Host {
                 None => break,
             }
         }
+        // Databases left open: open transactions are rolled back, locks
+        // released.
+        let dbs = std::mem::take(&mut *self.dbs.borrow_mut());
+        drop(dbs);
     }
 
     /// Drops every JavaScript value the host keeps (before the runtime goes
@@ -345,6 +352,7 @@ pub(crate) fn install_natives<'js>(ctx: &Ctx<'js>, host: &Rc<Host>) -> rquickjs:
     fs::install(&n);
     encoding::install(&n);
     csv::install(&n);
+    sqlite::install(&n);
     xlsx::install(&n);
     xlsx_style::install(&n);
     xlsx_print::install(&n);
