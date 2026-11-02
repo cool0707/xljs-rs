@@ -1,6 +1,7 @@
 //! Settings of the developer tools for the debugger window (xljs --debug).
 //! WebView2 has no API to choose the panel or the language the developer
-//! tools open with, so they go into the profile's Preferences file before
+//! tools open with, so they (and the browser's languages, which the profile
+//! keeps from its creation) go into the profile's Preferences file before
 //! the browser starts: the debugger uses a profile of its own (see
 //! native::webview::data_folder), which no running browser holds.
 
@@ -17,7 +18,8 @@ pub(crate) fn preferences_path(user_data: &str) -> std::path::PathBuf {
 pub(crate) fn prepare(user_data: &str) {
     let path = preferences_path(user_data);
     let old = std::fs::read_to_string(&path).unwrap_or_default();
-    let Some(new) = merge(&old, &locale(&crate::i18n::system_language())) else { return };
+    let lang = crate::i18n::system_language();
+    let Some(new) = merge(&old, &locale(&lang), &accept_languages(&lang)) else { return };
     if let Some(dir) = path.parent() {
         let _ = std::fs::create_dir_all(dir);
     }
@@ -58,13 +60,34 @@ pub(crate) fn locale(lang: &str) -> String {
     }
 }
 
+/// The browser's languages for a system language: "ja-JP" gives
+/// "ja-JP,ja" (the language and its base); empty for none.
+pub(crate) fn accept_languages(lang: &str) -> String {
+    let lang = lang.split(['.', '@']).next().unwrap_or("").replace('_', "-");
+    if lang.is_empty() || lang.eq_ignore_ascii_case("C") || lang.eq_ignore_ascii_case("POSIX") {
+        return String::new();
+    }
+    match lang.split_once('-') {
+        Some((base, _)) if !base.is_empty() => format!("{lang},{base}"),
+        _ => lang,
+    }
+}
+
 /// The Preferences JSON old with the developer tools opening on the Sources
 /// panel and, unless another language was chosen in the tools, in locale.
 /// WebView2 does not pass its Language to the tools, so "browserLanguage"
 /// would be English; it is replaced too. An empty locale leaves the language
-/// alone. None when old is not a JSON object (it is left alone).
-pub(crate) fn merge(old: &str, locale: &str) -> Option<String> {
+/// alone. The browser's languages (intl, which the profile keeps from its
+/// creation and the tools' "Browser UI language" follows) become accept
+/// unless it is empty. None when old is not a JSON object (it is left alone).
+pub(crate) fn merge(old: &str, locale: &str, accept: &str) -> Option<String> {
     let mut v: Value = if old.trim().is_empty() { Value::Object(Map::new()) } else { serde_json::from_str(old).ok()? };
+    if !accept.is_empty() {
+        let intl = object(v.as_object_mut()?, "intl")?;
+        for k in ["accept_languages", "selected_languages"] {
+            intl.insert(k.into(), Value::String(accept.into()));
+        }
+    }
     let devtools = object(v.as_object_mut()?, "devtools")?;
     // The values are JSON texts. The selected panel is "panel-selected-tab"
     // in current versions, "panel-selectedTab" in older ones.
@@ -102,31 +125,33 @@ mod tests {
 
     #[test]
     fn merge_new_and_existing() {
-        let v: Value = serde_json::from_str(&merge("", "ja").unwrap()).unwrap();
+        let v: Value = serde_json::from_str(&merge("", "ja", "ja-JP,ja").unwrap()).unwrap();
         assert_eq!(v["devtools"]["preferences"]["panel-selected-tab"], "\"sources\"");
         assert_eq!(v["devtools"]["preferences"]["language"], "\"ja\"");
         assert_eq!(v["devtools"]["synced_preferences_sync_disabled"]["language"], "\"ja\"");
+        assert_eq!(v["intl"]["accept_languages"], "ja-JP,ja");
+        assert_eq!(v["intl"]["selected_languages"], "ja-JP,ja");
 
         // The browser's language (written by earlier versions) is replaced.
         let old = r#"{"devtools":{"preferences":{"language":"\"browserLanguage\""}}}"#;
-        let v: Value = serde_json::from_str(&merge(old, "ja").unwrap()).unwrap();
+        let v: Value = serde_json::from_str(&merge(old, "ja", "").unwrap()).unwrap();
         assert_eq!(v["devtools"]["preferences"]["language"], "\"ja\"");
 
         // No locale: the language is left alone.
-        let v: Value = serde_json::from_str(&merge("", "").unwrap()).unwrap();
+        let v: Value = serde_json::from_str(&merge("", "", "").unwrap()).unwrap();
         assert!(v["devtools"]["preferences"].get("language").is_none());
 
         let old = r#"{"a":1,"devtools":{"preferences":{"panel-selected-tab":"\"console\"","language":"\"en-US\"","x":"1"}}}"#;
-        let v: Value = serde_json::from_str(&merge(old, "ja").unwrap()).unwrap();
+        let v: Value = serde_json::from_str(&merge(old, "ja", "").unwrap()).unwrap();
         assert_eq!(v["a"], 1);
         assert_eq!(v["devtools"]["preferences"]["panel-selected-tab"], "\"sources\"");
         // A language chosen in the tools stays.
         assert_eq!(v["devtools"]["preferences"]["language"], "\"en-US\"");
         assert_eq!(v["devtools"]["preferences"]["x"], "1");
 
-        assert!(merge("not json", "ja").is_none());
-        assert!(merge("[]", "ja").is_none());
-        assert!(merge(r#"{"devtools":1}"#, "ja").is_none());
+        assert!(merge("not json", "ja", "").is_none());
+        assert!(merge("[]", "ja", "").is_none());
+        assert!(merge(r#"{"devtools":1}"#, "ja", "").is_none());
     }
 
     #[test]
@@ -142,6 +167,11 @@ mod tests {
         assert_eq!(locale("de-DE"), "de");
         assert_eq!(locale("xx-YY"), "");
         assert_eq!(locale(""), "");
+        assert_eq!(accept_languages("ja-JP"), "ja-JP,ja");
+        assert_eq!(accept_languages("ja_JP.UTF-8"), "ja-JP,ja");
+        assert_eq!(accept_languages("ja"), "ja");
+        assert_eq!(accept_languages(""), "");
+        assert_eq!(accept_languages("C"), "");
     }
 
     #[test]

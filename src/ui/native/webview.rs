@@ -426,10 +426,16 @@ fn environment_options(folder: &str, debugger_profile: bool, debugger_window: bo
             crate::ui::devtools::prepare(folder);
         }
         // The developer tools follow the browser's language, which is
-        // English unless set.
+        // English unless set: the system's, as the UI language (Language
+        // and --lang) and the languages of pages (--accept-lang, and intl
+        // in the profile, see ui::devtools).
         let lang = crate::i18n::system_language();
         if !lang.is_empty() {
-            unsafe { options.set_language(lang) };
+            let accept = crate::ui::devtools::accept_languages(&lang);
+            unsafe {
+                options.set_additional_browser_arguments(format!("--lang={lang} --accept-lang={accept}"));
+                options.set_language(lang);
+            }
         }
     }
     options.into()

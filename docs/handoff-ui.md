@@ -323,8 +323,9 @@ cross-origin isolated）。最初は同期 XHR を WebResourceRequested の defe
 - 開発者ツールの言語と最初のパネル（Rust 版）: WebView2 には指定する API がないので、デバッグウィンドウのプロセスは専用のユーザーデータフォルダ
   （`%LOCALAPPDATA%\xljs\WebView2-debug`。ほかの WebView2 が掴んでいない）を使い、ブラウザを起動する前にプロファイルの `Preferences` の
   `devtools.preferences` に「最後に開いたパネル＝sources」と言語＝システムの表示言語に対応する開発者ツールのロケール（`ja` など。
-  未設定か browserLanguage のときだけ）を書く（`src/ui/devtools.rs`）。環境オプションの `Language` にもシステムの表示言語を渡すが、
-  WebView2 では開発者ツールの「Browser UI language」はこれに従わず英語のままなので、ロケールを直接指定している。
+  未設定か browserLanguage のときだけ）と、ブラウザの言語 `intl.accept_languages` / `intl.selected_languages`（`ja-JP,ja`。プロファイルは作成時の値を
+  持ち続けるので毎回書く）を書く（`src/ui/devtools.rs`）。WebView2 側もシステムの表示言語にする: 環境オプションの `Language` と
+  `AdditionalBrowserArguments` の `--lang=ja-JP --accept-lang=ja-JP,ja`（開発者ツールの「Browser UI language」は `navigator.language` に従う）。
 - 最初の行で一時停止（Rust 版）: デバッグ用のバンドル（`bundle_with(.., true)`）はエントリの最初の実行文（import・export の一覧・関数宣言を除く）の前に
   `while (import.meta.__xljsBreak) debugger;` を同じ span で差し込む（`insert_break`）。ソースマップでその行に対応するので、開発者ツールは元のファイルのその行で止まる。
   デバッグウィンドウは開いたらすぐ実行する（実行ボタン・チェックボックスはない。常に最初の行で止まる。`?autorun` のテストでは止まらない）。
