@@ -1617,15 +1617,16 @@
   }
 
   /**
-   * A form's accent option: a CSS color for both themes, or { light, dark }
-   * (either may be left out). Returns { light, dark } (empty for the default).
+   * A form's accent or background option: a CSS color for both themes, or
+   * { light, dark } (either may be left out). Returns { light, dark } (empty
+   * for the default). key is the error message for a bad color.
    */
-  function accentColor(v) {
+  function themeColor(v, key) {
     if (v === undefined || v === null || v === "") return { light: "", dark: "" };
     const color = (c) => {
       if (c === undefined || c === null || c === "") return "";
       const s = String(c).trim();
-      if (typeof c !== "string" || !/^[#\w\s(),.%\/+-]+$/.test(s)) throw new TypeError(T("form.badAccent", String(c)));
+      if (typeof c !== "string" || !/^[#\w\s(),.%\/+-]+$/.test(s)) throw new TypeError(T(key, String(c)));
       return s;
     };
     if (typeof v === "object") return { light: color(v.light), dark: color(v.dark) };
@@ -1976,7 +1977,7 @@
       submit: options.submit ? String(options.submit) : "",
       noSubmit: options.submit === false && buttons.length > 0,
       titleBar: customTitleBar(options.titleBar), icon: faClass(options.icon), submitIcon: faClass(options.submitIcon),
-      accent: accentColor(options.accent),
+      accent: themeColor(options.accent, "form.badAccent"), background: themeColor(options.background, "form.badBackground"),
       key, tabs, tabIcons, groups, buttons,
     };
     if (native.devPreview) return formPreview(o, fields, wire);
@@ -2145,7 +2146,7 @@
   function formInit(o, fields, wire) {
     return {
       type: "init", description: o.description, texts: formTexts(),
-      submit: o.submit, submitIcon: o.submitIcon, accent: o.accent, tabs: o.tabs, tabIcons: o.tabIcons,
+      submit: o.submit, submitIcon: o.submitIcon, accent: o.accent, background: o.background, tabs: o.tabs, tabIcons: o.tabIcons,
       groups: o.groups,
       noSubmit: o.noSubmit, buttons: o.buttons.map((b) => b.label), buttonIcons: o.buttons.map((b) => b.icon),
       buttonTooltips: o.buttons.map((b) => b.tooltip),
