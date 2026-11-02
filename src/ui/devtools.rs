@@ -17,18 +17,53 @@ pub(crate) fn preferences_path(user_data: &str) -> std::path::PathBuf {
 pub(crate) fn prepare(user_data: &str) {
     let path = preferences_path(user_data);
     let old = std::fs::read_to_string(&path).unwrap_or_default();
-    let Some(new) = merge(&old) else { return };
+    let Some(new) = merge(&old, &locale(&crate::i18n::system_language())) else { return };
     if let Some(dir) = path.parent() {
         let _ = std::fs::create_dir_all(dir);
     }
     let _ = std::fs::write(&path, new);
 }
 
+/// The locales of the developer tools (Chromium's DevTools front end).
+const LOCALES: &[&str] = &[
+    "af", "am", "ar", "as", "az", "be", "bg", "bn", "bs", "ca", "cs", "cy", "da", "de", "el", "en-GB", "en-US", "es", "es-419", "et", "eu", "fa", "fi", "fil", "fr",
+    "fr-CA", "gl", "gu", "he", "hi", "hr", "hu", "hy", "id", "is", "it", "ja", "ka", "kk", "km", "kn", "ko", "ky", "lo", "lt", "lv", "mk", "ml", "mn", "mr", "ms",
+    "my", "ne", "nl", "no", "or", "pa", "pl", "pt", "pt-PT", "ro", "ru", "si", "sk", "sl", "sq", "sr", "sr-Latn", "sv", "sw", "ta", "te", "th", "tr", "uk", "ur",
+    "uz", "vi", "zh", "zh-HK", "zh-TW", "zu",
+];
+
+/// The developer tools' locale for a system language such as "ja-JP"
+/// ("ja"); empty when they have none.
+pub(crate) fn locale(lang: &str) -> String {
+    let lang = lang.split(['.', '@']).next().unwrap_or("").replace('_', "-");
+    let lower = lang.to_ascii_lowercase();
+    let special = match lower.as_str() {
+        "zh-cn" | "zh-sg" | "zh-hans" | "zh-hans-cn" => Some("zh"),
+        "zh-tw" | "zh-hant" | "zh-hant-tw" => Some("zh-TW"),
+        "zh-hk" | "zh-mo" | "zh-hant-hk" => Some("zh-HK"),
+        "nb" | "nb-no" | "nn" | "nn-no" => Some("no"),
+        "pt-br" => Some("pt"),
+        _ => None,
+    };
+    if let Some(l) = special {
+        return l.into();
+    }
+    if let Some(l) = LOCALES.iter().find(|l| l.eq_ignore_ascii_case(&lower)) {
+        return l.to_string();
+    }
+    let base = lower.split('-').next().unwrap_or("");
+    match base {
+        "en" => "en-US".into(),
+        _ => LOCALES.iter().find(|l| **l == base).map(|l| l.to_string()).unwrap_or_default(),
+    }
+}
+
 /// The Preferences JSON old with the developer tools opening on the Sources
-/// panel and, unless chosen in the tools, in the browser's language (the
-/// system's, see Language of the environment). None when old is not a JSON
-/// object (it is left alone).
-pub(crate) fn merge(old: &str) -> Option<String> {
+/// panel and, unless another language was chosen in the tools, in locale.
+/// WebView2 does not pass its Language to the tools, so "browserLanguage"
+/// would be English; it is replaced too. An empty locale leaves the language
+/// alone. None when old is not a JSON object (it is left alone).
+pub(crate) fn merge(old: &str, locale: &str) -> Option<String> {
     let mut v: Value = if old.trim().is_empty() { Value::Object(Map::new()) } else { serde_json::from_str(old).ok()? };
     let devtools = object(v.as_object_mut()?, "devtools")?;
     // The values are JSON texts. The selected panel is "panel-selected-tab"
@@ -37,11 +72,24 @@ pub(crate) fn merge(old: &str) -> Option<String> {
     for k in ["panel-selected-tab", "panel-selectedTab"] {
         prefs.insert(k.into(), Value::String("\"sources\"".into()));
     }
-    let browser_language = Value::String("\"browserLanguage\"".into());
-    prefs.entry("language").or_insert(browser_language.clone());
-    // Synced settings live here while sync is off.
-    object(devtools, "synced_preferences_sync_disabled")?.entry("language").or_insert(browser_language);
+    if !locale.is_empty() {
+        set_language(prefs, locale);
+        // Synced settings live here while sync is off.
+        set_language(object(devtools, "synced_preferences_sync_disabled")?, locale);
+    }
     serde_json::to_string(&v).ok()
+}
+
+/// Sets the language unless one other than the browser's was chosen.
+fn set_language(prefs: &mut Map<String, Value>, locale: &str) {
+    let unset = match prefs.get("language") {
+        None => true,
+        Some(Value::String(s)) => s == "\"browserLanguage\"" || s.is_empty(),
+        Some(_) => false,
+    };
+    if unset {
+        prefs.insert("language".into(), Value::String(format!("\"{locale}\"")));
+    }
 }
 
 fn object<'a>(m: &'a mut Map<String, Value>, key: &str) -> Option<&'a mut Map<String, Value>> {
@@ -54,22 +102,46 @@ mod tests {
 
     #[test]
     fn merge_new_and_existing() {
-        let v: Value = serde_json::from_str(&merge("").unwrap()).unwrap();
+        let v: Value = serde_json::from_str(&merge("", "ja").unwrap()).unwrap();
         assert_eq!(v["devtools"]["preferences"]["panel-selected-tab"], "\"sources\"");
-        assert_eq!(v["devtools"]["preferences"]["language"], "\"browserLanguage\"");
-        assert_eq!(v["devtools"]["synced_preferences_sync_disabled"]["language"], "\"browserLanguage\"");
+        assert_eq!(v["devtools"]["preferences"]["language"], "\"ja\"");
+        assert_eq!(v["devtools"]["synced_preferences_sync_disabled"]["language"], "\"ja\"");
+
+        // The browser's language (written by earlier versions) is replaced.
+        let old = r#"{"devtools":{"preferences":{"language":"\"browserLanguage\""}}}"#;
+        let v: Value = serde_json::from_str(&merge(old, "ja").unwrap()).unwrap();
+        assert_eq!(v["devtools"]["preferences"]["language"], "\"ja\"");
+
+        // No locale: the language is left alone.
+        let v: Value = serde_json::from_str(&merge("", "").unwrap()).unwrap();
+        assert!(v["devtools"]["preferences"].get("language").is_none());
 
         let old = r#"{"a":1,"devtools":{"preferences":{"panel-selected-tab":"\"console\"","language":"\"en-US\"","x":"1"}}}"#;
-        let v: Value = serde_json::from_str(&merge(old).unwrap()).unwrap();
+        let v: Value = serde_json::from_str(&merge(old, "ja").unwrap()).unwrap();
         assert_eq!(v["a"], 1);
         assert_eq!(v["devtools"]["preferences"]["panel-selected-tab"], "\"sources\"");
         // A language chosen in the tools stays.
         assert_eq!(v["devtools"]["preferences"]["language"], "\"en-US\"");
         assert_eq!(v["devtools"]["preferences"]["x"], "1");
 
-        assert!(merge("not json").is_none());
-        assert!(merge("[]").is_none());
-        assert!(merge(r#"{"devtools":1}"#).is_none());
+        assert!(merge("not json", "ja").is_none());
+        assert!(merge("[]", "ja").is_none());
+        assert!(merge(r#"{"devtools":1}"#, "ja").is_none());
+    }
+
+    #[test]
+    fn locales() {
+        assert_eq!(locale("ja-JP"), "ja");
+        assert_eq!(locale("ja_JP.UTF-8"), "ja");
+        assert_eq!(locale("en-US"), "en-US");
+        assert_eq!(locale("en-AU"), "en-US");
+        assert_eq!(locale("en-GB"), "en-GB");
+        assert_eq!(locale("zh-CN"), "zh");
+        assert_eq!(locale("zh-TW"), "zh-TW");
+        assert_eq!(locale("pt-BR"), "pt");
+        assert_eq!(locale("de-DE"), "de");
+        assert_eq!(locale("xx-YY"), "");
+        assert_eq!(locale(""), "");
     }
 
     #[test]
