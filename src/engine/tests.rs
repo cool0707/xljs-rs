@@ -763,3 +763,22 @@ fn stop_key_ignored_while_waiting() {
     assert!(r.code == 0 && r.stdout.contains("done"), "exit {} {} {:?}", r.code, r.err_text(), r.stderr);
     assert!(!r.stderr.contains("confirm("), "asked: {:?}", r.stderr);
 }
+
+/// With the sources (xljs --debug), the entry stops on its first line of
+/// code when globalThis.__xljsBreakFirst is set; without, nothing is added.
+#[test]
+fn debug_bundle_breaks_on_first_line() {
+    let src = "import { x } from \"./dep\";\ntype T = number;\ninterface I { a: T }\nexport function f() { return 1; }\n\nconst y: T = x + f();\nconsole.log(y);\n";
+    let p = write_script("brk.ts", src);
+    std::fs::write(std::path::Path::new(&p).parent().unwrap().join("dep.ts"), "export const x = 1;\nconsole.log(x);\n").unwrap();
+    let code = String::from_utf8(bundle_with(&p, true).unwrap()).unwrap();
+    let pat = "if (__vite_ssr_import_meta__.__xljsBreak) debugger;";
+    assert_eq!(code.matches(pat).count(), 1, "{code}");
+    let line = code[..code.find(pat).unwrap()].matches('\n').count() as u32 + 1;
+    let m = crate::engine::sourcemap::Mapper::from_bundle(&code).unwrap();
+    let (file, l, _) = m.lookup(line, 1 + code.lines().nth(line as usize - 1).unwrap().find("if").unwrap() as u32).unwrap();
+    assert!(file.ends_with("brk.ts"), "{file}");
+    assert_eq!(l, 6);
+    let plain = String::from_utf8(bundle(&p).unwrap()).unwrap();
+    assert!(!plain.contains("debugger"));
+}
