@@ -10,12 +10,11 @@
 <main>
   <h1 id="name"></h1>
   <p id="hint"></p>
-  <label class="check"><input type="checkbox" id="break-first"> <span id="break-first-label"></span></label>
   <pre id="error" class="error-text" hidden></pre>
 </main>
 <footer>
   <span id="status" class="status"></span>
-  <button type="button" id="run" class="primary" disabled></button>
+  <button type="button" id="close" class="primary" hidden></button>
 </footer>
 <!-- The script runs in a worker (debug-worker.js); this page relays its calls. -->
 <script src="debug-page.js"></script>

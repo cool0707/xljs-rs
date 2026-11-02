@@ -343,14 +343,16 @@ impl Bundler {
     }
 }
 
-/// The flag of import.meta that insert_break checks (set by the module
-/// loader from globalThis.__xljsBreakFirst, see web/debug.js).
+/// The flag of import.meta that insert_break checks (the module loader asks
+/// globalThis.__xljsBreakCheck, see web/debug.js).
 const BREAK_FLAG: &str = "__xljsBreak";
 
-/// Puts `if (import.meta.__xljsBreak) debugger;` before the first statement
-/// of program that runs (not an import, an export list or a function
-/// declaration), with that statement's span: the debugger then stops on the
-/// script's first line of code (the break-first option of xljs --debug).
+/// Puts `while (import.meta.__xljsBreak) debugger;` before the first
+/// statement of program that runs (not an import, an export list or a
+/// function declaration), with that statement's span: the debugger then
+/// stops on the script's first line of code (xljs --debug). The flag stays
+/// true until the debugger has stopped there, so that the script waits for
+/// the developer tools to attach (see breakCheck in web/debug.js).
 fn insert_break<'a>(alloc: &'a Allocator, program: &mut oxc::ast::ast::Program<'a>) {
     use oxc::ast::ast::{Declaration, ExportDefaultDeclarationKind, Expression, IdentifierName, Statement};
     use oxc::ast::builder::AstBuilder;
@@ -370,7 +372,7 @@ fn insert_break<'a>(alloc: &'a Allocator, program: &mut oxc::ast::ast::Program<'
     let b = AstBuilder::new(alloc);
     let flag = IdentifierName::new(span, BREAK_FLAG, &b);
     let test = Expression::new_static_member_expression(span, Expression::new_import_meta(span, &b), flag, false, &b);
-    let stmt = Statement::new_if_statement(span, test, Statement::new_debugger_statement(span, &b), None, &b);
+    let stmt = Statement::new_while_statement(span, test, Statement::new_debugger_statement(span, &b), &b);
     program.body.insert(i, stmt);
 }
 
@@ -433,7 +435,7 @@ function __xljs_load(id, onExports) {
     }
   };
   const meta = { url: "file:///" + id };
-  Object.defineProperty(meta, "__xljsBreak", { get: () => globalThis.__xljsBreakFirst === true });
+  Object.defineProperty(meta, "__xljsBreak", { get: () => typeof globalThis.__xljsBreakCheck === "function" && globalThis.__xljsBreakCheck() === true });
   return fn(imp, dyn, exports, all, meta).then(() => exports);
 }
 "#;
