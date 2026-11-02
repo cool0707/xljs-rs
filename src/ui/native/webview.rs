@@ -399,14 +399,40 @@ fn webview_err(e: impl std::fmt::Display) -> Error {
     err!("ui.webviewError", e)
 }
 
-fn data_folder() -> String {
+/// Set by the debugger window (xljs --debug), the first window of its
+/// process: the process then uses a profile of its own, with the settings of
+/// the developer tools (ui::devtools) and the system's language.
+static DEBUGGER: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// The user data folder, and whether it is the debugger's profile.
+fn data_folder() -> (String, bool) {
     if let Ok(d) = std::env::var(crate::ui::WEBVIEW2_DATA_ENV)
         && !d.is_empty()
     {
-        return d;
+        return (d, false);
     }
     let base = std::env::var("LOCALAPPDATA").unwrap_or_default();
-    std::path::Path::new(&base).join("xljs").join("WebView2").to_string_lossy().into_owned()
+    let debugger = DEBUGGER.load(Ordering::SeqCst);
+    let name = if debugger { "WebView2-debug" } else { "WebView2" };
+    (std::path::Path::new(&base).join("xljs").join(name).to_string_lossy().into_owned(), debugger)
+}
+
+/// The environment options; the same for every window that uses the folder
+/// (a browser with other options cannot share it).
+fn environment_options(folder: &str, debugger_profile: bool, debugger_window: bool) -> ICoreWebView2EnvironmentOptions {
+    let options = CoreWebView2EnvironmentOptions::default();
+    if debugger_profile {
+        if debugger_window {
+            crate::ui::devtools::prepare(folder);
+        }
+        // The developer tools follow the browser's language, which is
+        // English unless set.
+        let lang = crate::i18n::system_language();
+        if !lang.is_empty() {
+            unsafe { options.set_language(lang) };
+        }
+    }
+    options.into()
 }
 
 pub(super) fn take_pwstr(p: PWSTR) -> String {
@@ -428,8 +454,13 @@ fn embed(hwnd: HWND, st: &Rc<WinState>) -> Result<()> {
             let _ = tx.send(hr.map(|_| env));
             Ok(())
         }));
-        let options: ICoreWebView2EnvironmentOptions = CoreWebView2EnvironmentOptions::default().into();
-        loader::create_environment(&data_folder(), &options, &handler).map_err(webview_err)?;
+        let debugger_window = st.o.debug && st.o.isolated;
+        if debugger_window {
+            DEBUGGER.store(true, Ordering::SeqCst);
+        }
+        let (folder, debugger_profile) = data_folder();
+        let options = environment_options(&folder, debugger_profile, debugger_window);
+        loader::create_environment(&folder, &options, &handler).map_err(webview_err)?;
         let env = wait_with_pump(rx).map_err(webview_err)?.map_err(webview_err)?.ok_or_else(|| webview_err("no environment"))?;
 
         // The controller.

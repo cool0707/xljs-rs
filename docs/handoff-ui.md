@@ -320,6 +320,10 @@ cross-origin isolated）。最初は同期 XHR を WebResourceRequested の defe
 セッションと終了判定は `internal/engine/debug.go`、ページ側は `internal/ui/web/debug.js`（ランタイム）と
 `debug-page.js`（画面・トランスポート）。エラーはバンドルのソースマップで元ファイルの位置に戻して表示する。
 `--debug=window` で従来の「goja で実行＋画面の開発者ツールだけ有効」も残している。
+- 開発者ツールの言語と最初のパネル（Rust 版）: WebView2 には指定する API がないので、デバッグウィンドウのプロセスは専用のユーザーデータフォルダ
+  （`%LOCALAPPDATA%\xljs\WebView2-debug`。ほかの WebView2 が掴んでいない）を使い、ブラウザを起動する前にプロファイルの `Preferences` の
+  `devtools.preferences` に「最後に開いたパネル＝sources」と言語＝browserLanguage（未設定のときだけ）を書く（`src/ui/devtools.rs`）。
+  ブラウザの言語は環境オプションの `Language` にシステムの表示言語を渡す（未指定だと英語になる）。
 - 制約: native 呼び出しごとに往復があるので遅い／V8 と goja の差（ブラウザの API が見える）／エディタ一体型ではない。
 - テスト: Linux は `fakeDebugUI`（goja がページ役）で全結合テストをこの経路でも実行（`TestScriptsInDebugger` ほか）。
   Windows CI は `TestWebViewIsolated`（COOP/COEP、SharedArrayBuffer、ワーカーの Atomics.wait）と `TestDebuggerWindow`（実ウィンドウで自動実行）。

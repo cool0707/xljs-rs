@@ -5,6 +5,7 @@
 mod builtin;
 mod console;
 mod console_form;
+mod devtools;
 mod icon;
 pub mod mock;
 mod mock_app;
