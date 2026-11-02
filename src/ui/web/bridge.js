@@ -2,7 +2,10 @@
 // Message bridge between a built-in page and the script. Messages are JSON;
 // the script's side is in internal/api/prelude.js (ui.form, ui.table).
 const host = (() => {
-  const wv = window.chrome && window.chrome.webview;
+  // In a frame of the development mode's preview (dev.js, form.html?preview)
+  // the parent page plays the script: messages go through window.postMessage.
+  const framed = window.parent !== window && new URLSearchParams(location.search).has("preview");
+  const wv = framed ? null : window.chrome && window.chrome.webview;
   const handlers = [];
   if (wv) {
     wv.addEventListener("message", (e) => {
@@ -13,10 +16,18 @@ const host = (() => {
       for (const fn of handlers) fn(msg);
     });
   }
+  if (framed) {
+    window.addEventListener("message", (e) => {
+      if (e.source !== window.parent || typeof e.data !== "string" || e.data[0] !== "\x02") return;
+      const msg = JSON.parse(e.data.slice(1));
+      for (const fn of handlers) fn(msg);
+    });
+  }
   const canAttach = !!(wv && typeof wv.postMessageWithAdditionalObjects === "function");
   return {
     /** Sends msg to the script; files (File objects) arrive there as paths. */
     send(msg, files) {
+      if (framed) window.parent.postMessage("\x01" + JSON.stringify(msg), "*");
       if (!wv) return;
       const s = JSON.stringify(msg);
       if (files && files.length && canAttach) wv.postMessageWithAdditionalObjects(s, Array.from(files));

@@ -68,6 +68,7 @@ Stop-XljsMute; Stop-XljsAwake
 | dialog-aggregate | フォルダー選択 → 進捗 → 保存ダイアログ → alert の OK | alert の文言、出力ブックの集計・明細、終了。`shell.showItemInFolder` で開いたエクスプローラーは閉じる |
 | form-aggregate | WebView2 のフォーム: 参照…（フォルダー／保存）、ラジオ、チェックボックス → 集計 → 閉じる | フォームのログ（件数・保存先）と「完了しました」、出力ブック（明細シートなし・商品名で集計） |
 | progress-cancel | IProgressDialog のキャンセル | 「キャンセルされました」の alert、終了 |
+| watchdog | 無限ループのスクリプトを `--watchdog=2` で実行 → キャンセル → OK | 確認の文言、キャンセル後に再度尋ねる、終了コード 130 |
 
 2026-10-31 時点で 4 件とも PASS（`-MonitorOff` で画面を消した状態でも同じ）。あわせて `cargo test --lib`
 （68 件、ネイティブダイアログと WebView2 のテストを含む）も実機で PASS。
@@ -86,7 +87,11 @@ Stop-XljsMute; Stop-XljsAwake
 - **Playwright（CDP）で WebView2 に接続できない**。`src/ui/native/loader.rs` が `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS`
   などの環境変数を意図的に空にしているため `--remote-debugging-port` を渡せない。必要になったら、デバッグビルド限定の
   環境変数で `AdditionalBrowserArguments` を設定する変更を入れる（現状は UIA で足りている）。
-- ロック中・サインアウト中・RDP 切断中は何もできない。
+- ロック中・サインアウト中・RDP 切断中は何もできない（UIA でダイアログのボタンは押せるが、スクリーンショットは黒く、
+  WebView2 の `win.evaluate` は応答しない）。`Start-XljsAwake` を使わずに長く操作するとロックされることがある。
+- **キー入力の注入（`keybd_event`／`SendInput`）は `claude rc` のセッションでは届かない**（同じプロセスの
+  `GetAsyncKeyState` にも反映されない）。`--stop-key` は自動では確認できないので、利用者にキーを押してもらう。
+  もし届いても、前面は Claude Code の端末なので Esc は送らないこと（Claude の処理が中断される）。
 - 日付入力（`<input type=date>`）の操作、ドラッグ＆ドロップ、`--debug` のデバッグウィンドウ（開発者ツール）は未検証。
 
 ## はまりどころ（実際に踏んだもの）
@@ -104,6 +109,11 @@ Stop-XljsMute; Stop-XljsAwake
 - ファイル名欄の AutomationId: 開く・保存は `1001`（クラス Edit）、フォルダー選択は `1152`。確定ボタンは `1`、キャンセルは `2`。
 - `form-aggregate` は `remember: true` なので、前回の入力が次回の初期値になる（チェックボックスは状態を見てから押す）。
 - コンソール版（`--features console`）は終了時に「Enter キーで閉じます...」で止まることがある。GUI の確認は GUI 版（既定のビルド）で。
+- **`claude rc` から起動したウィンドウは前面に来ない**（フォアグラウンドの制限）。`Save-XljsScreenshot -Window` は画面の
+  その範囲を撮るので、上に重なったウィンドウが写る。撮る前に `SetWindowPos(h, HWND_TOPMOST, …, SWP_NOMOVE|SWP_NOSIZE|SWP_NOACTIVATE)`
+  で一時的に最前面にし、撮ったら `HWND_NOTOPMOST` に戻す。同じ理由で alert などには自動の通知（「入力を待っています」）が出る。
+- PDF の見た目は、Read ツールでは開けない（pdftoppm がない）。`%TEMP%` に venv を作って PyMuPDF を入れ、`get_pixmap` で
+  PNG にして見る（`get_page_fonts` で埋め込みフォントも確認できる）。終わったら venv は消す。
 - `stay-awake.ps1` は同時に 1 つだけ動く（Mutex）。元のスクリーンセーバー設定はレジストリから読む
   （以前は SPI の現在値を覚えていたため、重ねて起動すると「止めた状態」を元の値として戻してしまった）。
 

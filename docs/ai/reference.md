@@ -1,6 +1,6 @@
 ---
 name: xljs-reference
-description: xljs（Excel・CSV・JSON を JavaScript で処理する Windows 用の実行環境）の詳しい API リファレンスとレシピ。xljs のスクリプトを書く・直すときに、全オプション・書式・PDF 出力・入力フォーム（ui.form）・表（ui.table）・グラフ（ui.chart）・日付（dayjs）・アプリモードを確かめるために使う。
+description: xljs（Excel・CSV・JSON を JavaScript で処理する Windows 用の実行環境）の詳しい API リファレンスとレシピ。xljs のスクリプトを書く・直すときに、全オプション・書式・PDF 出力・PDF の編集・入力フォーム（ui.form）・表（ui.table）・グラフ（ui.chart）・日付（dayjs）・アプリモードを確かめるために使う。
 ---
 
 # xljs API リファレンス（AI チャット向け）
@@ -37,6 +37,7 @@ description: xljs（Excel・CSV・JSON を JavaScript で処理する Windows �
 | `xljs.args` | 引数の配列（exe にドロップしたファイルのパスなど） |
 | `xljs.script` / `xljs.scriptDir` | スクリプトのパス / フォルダ |
 | `xljs.env(name)` | 環境変数（無ければ `null`）。例 `xljs.env("USERPROFILE")` |
+| `path.expandEnv(s)` | `%NAME%` を環境変数で置き換えた文字列。パスを受け取る API は自動で展開する（`fs.readText("%USERPROFILE%\\Desktop\\a.txt")`） |
 | `xljs.title` | ダイアログのタイトル（代入で変更可） |
 | `exit(code?)` | スクリプトを終了する |
 
@@ -107,6 +108,19 @@ description: xljs（Excel・CSV・JSON を JavaScript で処理する Windows �
 | `shell.showItemInFolder(p)` | エクスプローラーでファイルを選択した状態で開く（配列で複数可） |
 | `shell.openPath(p)` | 既定のアプリで開く（.xlsx なら Excel、フォルダならエクスプローラー） |
 | `shell.openExternal(url)` | ブラウザで開く |
+
+### ad（Active Directory。ドメイン参加の Windows のみ）
+
+サインイン中のユーザーの権限で読むだけ。結果のキーは LDAP の属性名（`sAMAccountName` `displayName` `mail` `department` `title` `manager` `memberOf` `lastLogonTimestamp` `whenCreated` など）。日時は `Date`（無期限・なしは `null`）、`memberOf` は識別名の配列。`type`（"user" / "computer" / "group" ...）、`enabled` `lockedOut` `passwordExpired` も付く。
+
+| API | 説明 |
+|---|---|
+| `ad.available()` | ドメインに参加しているか |
+| `xljs.computerName` / `xljs.userName` | コンピューター名 / ログオン中のユーザー名（AD なしでも使える） |
+| `ad.me()` / `ad.computer()` | 自分 / このコンピューター |
+| `ad.get(id)` | 1 件（ログオン名・識別名・UPN・メール・SID・名前。なければ `null`） |
+| `ad.search("山田*")` | 名前・ログオン名・表示名・メールで検索（既定はユーザー） |
+| `ad.search({ type, filter, disabled, lockedOut, expired, expiringDays, inactiveDays, passwordExpired, passwordNeverExpires, memberOf, recursive, searchBase, properties, limit })` | 条件はすべて AND。`type`: "user"（既定）/ "computer" / "group" / "all"。`filter`: `{ department: "営業部", title: ["課長", "部長"], mail: true }` か LDAP のフィルタ文字列。`inactiveDays: 90` は 90 日ログオンなし。`memberOf` はグループ名か識別名 |
 
 ## Excel
 
@@ -204,6 +218,33 @@ await xljs.htmlToPdf("<h1>報告書</h1><p>本文</p>", "報告書.pdf", { paper
 - `options` で上書きできる: `paper`（`"A3"` `"A4"` `"B5"` `"Letter"` など）`landscape` `scale`（%）`fitToWidth` `fitToHeight` `fitToPage` `margin`（mm）`gridLines` `centerHorizontally` `charts: false` `sheets`。
 - 値・表示形式・フォント・塗り・罫線・結合・折り返し・回転・画像・図形とテキストボックス（よく使う形。ほかの形は四角になる）・線と矢印・グラフ（`sheet.charts` で描けるもの）を描く。条件付き書式・SmartArt・Excel 2016 以降のグラフは描かない。自動の改ページの位置は Excel と少し違うことがある。
 - `toHtml(options?)` は同じページを HTML の文字列で返す（グラフは空の枠）。
+
+## PDF の編集（pdf）
+
+PDF の結合・ページの削除・挿入・回転・文字の追加ができる（Excel・Acrobat・WebView2 は不要。mock・コンソールでも動く）。ページ番号は 1 始まり、位置は mm、文字の大きさは pt。
+
+```js
+const doc = pdf.open("報告書.pdf");                    // パスワード付きは pdf.open(p, { password: "..." })
+doc.append("別紙.pdf");                                 // 最後に結合（{ pages: "1-3" } で一部だけ）
+doc.insert(2, "差し込み.pdf", { pages: [1] });          // 2 ページ目の前に挿入
+doc.insertBlankPage(1, { paper: "A4" });                // 白紙のページ（表紙）
+doc.removePages("5-6,-1");                              // 削除（-1 は最後のページ）
+doc.rotatePages(3, 90);                                 // 時計回りに回転
+doc.addText("all", (p) => `${p.number} / ${p.count}`, { position: "bottom-center", size: 9 }); // ページ番号
+doc.addText("all", "資料番号 A-001", { position: "top-right", size: 9 }); // 右上に資料番号
+doc.addText(1, "提出用", { x: 20, y: 15, size: 14, color: "red" });     // 位置を mm で
+doc.save("報告書_提出用.pdf");                          // 省略で上書き
+doc.close();
+const p = pdf.merge(["a.pdf", "b.pdf", "c.pdf"], "まとめ.pdf"); // 結合して保存（保存先を省くと文書を返す）
+```
+
+- ページの指定: 番号・番号の配列・`"1-3,5"`・`"3-"`（3 ページ目から最後まで）・`"all"`。負の番号は後ろから。
+- `doc.pageCount`、`doc.pages`（`[{ number, width, height, rotation }]`。表示したときの大きさ（mm）と回転）。
+- `insert` / `append` の取り込み元は PDF ファイル（パス・ハンドル・`File`・`Blob`・`ArrayBuffer`）か別の `PdfDocument`。自分自身を渡すとページの複製になる。しおり（アウトライン）とフォームの定義は取り込まない。
+- `addText` の置き場所は `position` が簡単: `"top-left"` `"top-center"` `"top-right"` `"center"` `"bottom-left"` `"bottom-center"` `"bottom-right"`（`"右下"` `"下中央"` なども可）。ページの端から `margin`（mm、既定 10。`{ x, y }` で別々に）だけ内側に置き、複数行は寄せた側にそろう。
+- ほかのオプション: `x` `y`（左上からの位置。`y` は文字の上端）、`right` `bottom`（右端・下端からの位置。指定した向きは `position` より優先）、`size`（既定 11）、`color`（`"#rrggbb"` か色名）、`opacity`（0〜1）、`align`（行の揃え）、`lineHeight`（既定 1.3）、`rotate`（度、反時計回り）、`font`（`"游ゴシック"` `"メイリオ"` `"ＭＳ 明朝"` などの名前かフォントファイルのパス。配列なら文字ごとに前から探す）。`"\n"` で改行。回転したページでも見た目の向きで置く。
+- 文字はフォントの使った字だけを埋め込むので、検索・コピーできる。既定のフォントは游ゴシック（Windows）。
+- 保存した PDF は暗号化しない（パスワードは外れる）。電子署名は無効になる。
 
 ## CSV
 
@@ -333,6 +374,7 @@ await ui.form({
 - `fields` に `{ group: "出力", icon: "file-export", help: "説明", fields: [...] }` を項目と並べて書くと見出し付きのグループになる（タブの中でも可。値は項目と同じく 1 つのオブジェクト）。
 - アイコン（Font Awesome Free の名前。`"folder-open"` など）: 項目・タブ・ボタンの `icon`、送信ボタンは `submitIcon`。フォームの `icon` は `titleBar: "custom"` のときだけタイトルバーに出る（それ以外は無視）。
 - アクセントカラー: `accent: "#c42b1c"`（CSS の色。ライト・ダーク共通）か `accent: { light, dark }`。送信ボタン・タブ・フォーカス枠などの色が変わる。
+- 背景色: `background: "#fff8e1"`（CSS の色。ライト・ダーク共通）か `background: { light, dark }`。暗い色なら文字・入力欄もダークの配色になる。
 - `table` に `editable: true` を付けるとセルをその場で編集でき、入力のたびに検証してエラーのセルを赤く表示する（エラーが残っていると送信できない）。検証を通った値は元の行オブジェクトに書き込まれる。
 
 ```js

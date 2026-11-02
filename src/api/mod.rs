@@ -2,12 +2,14 @@
 //! the prelude that builds the public objects (fs, path, csv, workbooks,
 //! pickers, ui, console, polyfills) on top of them.
 
+mod ad;
 mod app;
 mod csv;
 mod dayjs;
 mod encoding;
 mod fs;
 mod numfmt;
+mod pdf;
 mod sqlite;
 mod xlsx_calc;
 pub(crate) mod gopath;
@@ -17,6 +19,7 @@ mod ui;
 mod vba;
 mod xlsx;
 mod xlsx_chart;
+mod xlsx_outline;
 mod xlsx_print;
 mod xlsx_shape;
 mod xlsx_style;
@@ -37,6 +40,7 @@ use crate::ui::Ui;
 use crate::{Error, i18n};
 
 pub use app::{WindowAssets, page_url};
+pub use xlsx_outline::outline as workbook_outline;
 pub use encoding::{decode, detect_encoding, encode, norm_encoding};
 pub use js::A;
 
@@ -58,6 +62,11 @@ pub struct Env {
     pub meta: Meta,
     pub assets: Option<Arc<dyn AssetFs>>,
     pub debug: bool,
+    /// See engine::Options::dev_guard and preview. removed counts the
+    /// files fs.remove deleted (dev_guard asks before the second one).
+    pub dev_guard: bool,
+    pub preview: String,
+    pub removed: std::sync::atomic::AtomicU32,
 }
 
 impl Env {
@@ -80,6 +89,7 @@ pub struct Host {
     cleanup: RefCell<Vec<Box<dyn FnOnce()>>>,
     next_id: Cell<u64>,
     pub(crate) books: RefCell<HashMap<u64, xlsx::Book>>,
+    pub(crate) pdfs: RefCell<HashMap<u64, crate::pdf::PdfDoc>>,
     pub(crate) dbs: RefCell<HashMap<u64, crate::db::Db>>,
     callbacks: RefCell<HashMap<u64, Persistent<Function<'static>>>>,
     values: RefCell<HashMap<u64, Persistent<Value<'static>>>>,
@@ -104,6 +114,7 @@ impl Host {
             cleanup: RefCell::new(Vec::new()),
             next_id: Cell::new(0),
             books: RefCell::new(HashMap::new()),
+            pdfs: RefCell::new(HashMap::new()),
             dbs: RefCell::new(HashMap::new()),
             callbacks: RefCell::new(HashMap::new()),
             values: RefCell::new(HashMap::new()),
@@ -345,9 +356,11 @@ pub(crate) fn install_natives<'js>(ctx: &Ctx<'js>, host: &Rc<Host>) -> rquickjs:
     xlsx::install(&n);
     xlsx_style::install(&n);
     xlsx_print::install(&n);
+    pdf::install(&n);
     vba::install(&n);
     ui::install(&n);
     app::install(&n);
+    ad::install(&n);
     Ok(obj)
 }
 
@@ -366,6 +379,14 @@ fn install_core(n: &N) {
     });
     n.set("stderr", |h, a| {
         write_out(&h.env.stderr, &a.str(0));
+        a.undefined()
+    });
+    // The form preview of the development mode (Env::preview): the path
+    // ("" = off) and the writing of the form's first message.
+    n.val("devPreview", n.host.env.preview.clone());
+    n.set("devPreviewWrite", |h, a| {
+        let p = h.env.preview.clone();
+        std::fs::write(&p, a.str(0)).map_err(|e| a.throw(&Error::path("open", p.clone(), e)))?;
         a.undefined()
     });
     n.set("exit", |h, a| {
@@ -387,6 +408,8 @@ fn install_core(n: &N) {
     n.val("script", env.script.clone());
     n.val("version", env.version.clone());
     n.val("platform", platform());
+    n.val("computerName", computer_name());
+    n.val("userName", user_name());
     n.val("uiName", env.ui.name());
     n.val("lang", i18n::lang());
     n.set("t", |_, a| {
@@ -403,6 +426,45 @@ pub fn platform() -> &'static str {
         "macos" => "darwin",
         os => os,
     }
+}
+
+/// The name of this computer (NetBIOS name on Windows, like %COMPUTERNAME%).
+#[cfg(windows)]
+pub fn computer_name() -> String {
+    use windows::Win32::System::SystemInformation::*;
+    let mut buf = [0u16; 256];
+    let mut n = buf.len() as u32;
+    match unsafe { GetComputerNameExW(ComputerNameNetBIOS, Some(windows::core::PWSTR(buf.as_mut_ptr())), &mut n) } {
+        Ok(()) => String::from_utf16_lossy(&buf[..n as usize]),
+        Err(_) => std::env::var("COMPUTERNAME").unwrap_or_default(),
+    }
+}
+
+#[cfg(not(windows))]
+pub fn computer_name() -> String {
+    std::fs::read_to_string("/proc/sys/kernel/hostname")
+        .or_else(|_| std::fs::read_to_string("/etc/hostname"))
+        .map(|s| s.trim().to_string())
+        .or_else(|_| std::env::var("HOSTNAME"))
+        .unwrap_or_default()
+}
+
+/// The logon name of the user running the script (without the domain).
+#[cfg(windows)]
+pub fn user_name() -> String {
+    use windows::Win32::System::WindowsProgramming::GetUserNameW;
+    let mut buf = [0u16; 257];
+    let mut n = buf.len() as u32;
+    match unsafe { GetUserNameW(Some(windows::core::PWSTR(buf.as_mut_ptr())), &mut n) } {
+        // n counts the terminating NUL.
+        Ok(()) => String::from_utf16_lossy(&buf[..(n as usize).saturating_sub(1)]),
+        Err(_) => std::env::var("USERNAME").unwrap_or_default(),
+    }
+}
+
+#[cfg(not(windows))]
+pub fn user_name() -> String {
+    std::env::var("USER").or_else(|_| std::env::var("LOGNAME")).unwrap_or_default()
 }
 
 /// Raises err as a JavaScript Error with a localized message.

@@ -17,5 +17,7 @@
 | `csv-to-xlsx.js` | CSV → Excel | CSV（Shift_JIS / UTF-8 自動判定）を Excel ブックに変換する |
 | `xlsx-to-json.js` | Excel → JSON | Excel の先頭シートを JSON / JSON Lines に書き出す |
 | `xlsx-to-pdf.js` | Excel → PDF | Excel ファイルを印刷したときと同じページ設定・グラフ付きで PDF にする（`book.toPdf`） |
+| `pdf-merge-stamp.js` | PDF の編集（`pdf`） | 複数の PDF を結合し、表紙・ページ番号・透かしを入れる（`pdf.merge`・`insertBlankPage`・`addText`） |
 | `xlsx-style-report.js` | Excel の書式 | フォント・罫線・塗りつぶし・表示形式・セル結合・ウィンドウ枠の固定などを使った帳票 |
+| `ad-account-report.js` | Active Directory（`ad`） | 無効・ロックアウト中・パスワード期限切れのアカウントと使われていないコンピューターを Excel に書き出す（`ad.search`・`ad.me`） |
 | `pack-drop-xlsx-to-csv.js` | exe 化（`xljs pack`） | exe にドロップした Excel を CSV に変換する（`xljs.args`） |

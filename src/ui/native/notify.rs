@@ -15,7 +15,7 @@
 //! otherwise only flash on the taskbar.
 
 use std::cell::RefCell;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::OnceLock;
 use std::time::{Duration, Instant};
 
@@ -57,13 +57,27 @@ struct State {
     added: bool,
     /// Balloons shown and not yet reported closed.
     open: u32,
+    /// A notification of the script (ui.notify) was shown since the icon
+    /// was added. The automatic ones (watch) are only about a dialog that
+    /// waits, so they go when it closes and do not hold up the exit.
+    explicit: bool,
+}
+
+struct Watch {
+    title: String,
+    message: String,
+    /// unwatch is called when the dialog closes.
+    tracked: bool,
 }
 
 thread_local! {
     static STATE: RefCell<State> = RefCell::new(State::default());
     /// The notifications to show if the dialog has not come to the front
     /// by the time the timer fires, by timer id.
-    static WATCHES: RefCell<HashMap<usize, (String, String)>> = RefCell::new(HashMap::new());
+    static WATCHES: RefCell<HashMap<usize, Watch>> = RefCell::new(HashMap::new());
+    /// The tracked watches whose notification is shown and whose dialog is
+    /// still open.
+    static SHOWN: RefCell<HashSet<usize>> = RefCell::new(HashSet::new());
 }
 
 unsafe extern "system" fn wnd_proc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
@@ -134,9 +148,16 @@ fn base_data(hwnd: HWND) -> NOTIFYICONDATAW {
     NOTIFYICONDATAW { cbSize: std::mem::size_of::<NOTIFYICONDATAW>() as u32, hWnd: hwnd, uID: ICON_ID, ..Default::default() }
 }
 
-/// Shows a notification. Must be called on the UI thread.
+/// Shows a notification of the script. Must be called on the UI thread.
 pub(crate) fn show(title: &str, message: &str) {
-    let Some(hwnd) = window() else { return };
+    if show_balloon(title, message) {
+        STATE.with(|s| s.borrow_mut().explicit = true);
+    }
+}
+
+/// Shows a balloon; false when it could not be shown.
+fn show_balloon(title: &str, message: &str) -> bool {
+    let Some(hwnd) = window() else { return false };
     // A balloon without text is not shown: use the title as the text.
     let (title, message) = if message.trim().is_empty() { ("", title) } else { (title, message) };
     let message = if message.trim().is_empty() { " " } else { message };
@@ -158,11 +179,11 @@ pub(crate) fn show(title: &str, message: &str) {
         let added = STATE.with(|s| s.borrow().added);
         if added {
             if !Shell_NotifyIconW(NIM_MODIFY, &d).as_bool() {
-                return;
+                return false;
             }
         } else {
             if !Shell_NotifyIconW(NIM_ADD, &d).as_bool() {
-                return;
+                return false;
             }
             let mut v = base_data(hwnd);
             v.Anonymous.uVersion = NOTIFYICON_VERSION_4;
@@ -175,6 +196,7 @@ pub(crate) fn show(title: &str, message: &str) {
         });
         SetTimer(Some(hwnd), REMOVE_TIMER, REMOVE_AFTER.as_millis() as u32, None);
     }
+    true
 }
 
 /// A balloon was closed: the icon goes with the last one.
@@ -196,8 +218,10 @@ fn remove() {
         let r = (s.hwnd, s.added);
         s.added = false;
         s.open = 0;
+        s.explicit = false;
         r
     });
+    SHOWN.with(|s| s.borrow_mut().clear());
     if let Some(h) = hwnd {
         unsafe {
             let _ = KillTimer(Some(h), REMOVE_TIMER);
@@ -210,11 +234,16 @@ fn remove() {
 
 /// Waits (serving window messages) until the notifications still shown
 /// have closed, at most EXIT_WAIT, then removes the icon. Called when the
-/// script has ended, before the process exits.
+/// script has ended, before the process exits. Only the notifications of
+/// the script are waited for: the automatic ones are about dialogs and
+/// windows that are gone now.
 pub(crate) fn finish() {
     let deadline = Instant::now() + EXIT_WAIT;
     let mut m = MSG::default();
-    while STATE.with(|s| s.borrow().added) {
+    while STATE.with(|s| {
+        let s = s.borrow();
+        s.added && s.explicit
+    }) {
         let now = Instant::now();
         if now >= deadline {
             break;
@@ -262,29 +291,34 @@ unsafe extern "system" fn watch_proc(_: HWND, _: u32, id: usize, _: u32) {
     unsafe {
         let _ = KillTimer(None, id);
     }
-    if let Some((title, message)) = WATCHES.with(|w| w.borrow_mut().remove(&id))
+    if let Some(w) = WATCHES.with(|w| w.borrow_mut().remove(&id))
         && super::super::auto_notify()
         && !app_active()
+        && show_balloon(&w.title, &w.message)
+        && w.tracked
     {
-        show(&title, &message);
+        SHOWN.with(|s| s.borrow_mut().insert(id));
     }
 }
 
 /// Shows a notification shortly unless xljs is in the foreground by then
 /// (a dialog that is about to open came to the front). The timer also runs
-/// inside a dialog's modal loop. Returns an id for unwatch (0 = none).
-pub(crate) fn watch(title: &str, message: &str) -> usize {
+/// inside a dialog's modal loop. tracked: unwatch is called when the dialog
+/// closes. Returns an id for unwatch (0 = none).
+pub(crate) fn watch(title: &str, message: &str, tracked: bool) -> usize {
     if !super::super::auto_notify() {
         return 0;
     }
     let id = unsafe { SetTimer(None, 0, WATCH_DELAY, Some(watch_proc)) };
     if id != 0 {
-        WATCHES.with(|w| w.borrow_mut().insert(id, (title.to_string(), message.to_string())));
+        WATCHES.with(|w| w.borrow_mut().insert(id, Watch { title: title.to_string(), message: message.to_string(), tracked }));
     }
     id
 }
 
-/// Cancels a watch whose dialog has closed.
+/// Ends the watch of a dialog that has closed. Its notification ("waiting
+/// for input") is taken away, unless a notification of the script or of
+/// another open dialog shares the icon.
 pub(crate) fn unwatch(id: usize) {
     if id == 0 {
         return;
@@ -293,11 +327,18 @@ pub(crate) fn unwatch(id: usize) {
         let _ = KillTimer(None, id);
     }
     WATCHES.with(|w| w.borrow_mut().remove(&id));
+    let (shown, others) = SHOWN.with(|s| {
+        let mut s = s.borrow_mut();
+        (s.remove(&id), !s.is_empty())
+    });
+    if shown && !others && !STATE.with(|s| s.borrow().explicit) {
+        remove();
+    }
 }
 
 /// Runs f (which shows a modal dialog) with a watch.
 pub(crate) fn watching<T>(title: &str, message: &str, f: impl FnOnce() -> T) -> T {
-    let id = watch(title, message);
+    let id = watch(title, message, true);
     let r = f();
     unwatch(id);
     r

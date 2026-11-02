@@ -3,6 +3,8 @@ body.chart-page { margin: 0; height: 100vh; display: flex; flex-direction: colum
 body.chart-page .xljs-chart { flex: 1; min-height: 0; padding: 8px; box-sizing: border-box; }
 .xljs-chart { position: relative; }
 .xljs-chart.xljs-gantt { overflow: auto; }
+/* No scrollbars on paper (the box is the chart's place on the sheet). */
+.xljs-print-chart.xljs-gantt, .xljs-print-chart .gantt-container { overflow: hidden; }
 .xljs-chart-empty { color: var(--muted); padding: 24px; text-align: center; }
 body.chart-page #error { margin: 8px 12px; }
 /* Frappe Gantt in the pages' fonts and colors. */

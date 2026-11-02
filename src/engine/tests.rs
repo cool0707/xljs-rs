@@ -603,6 +603,82 @@ fn watchdog_stops_endless_loops() {
 }
 
 #[test]
+fn watchdog_tells_where_it_stopped() {
+    let _l = lock_lang("ja");
+    let src = "let n = 0;\nfunction spin() {\n  while (true) { n++; }\n}\nspin();\n";
+    let r = run_watched(src, "[true]", Duration::from_millis(200));
+    assert_eq!(r.code, watchdog::STOPPED_CODE, "{:?}", r.stderr);
+    assert!(r.stderr.contains("中止した場所:\n    at spin (loop.js:3:"), "{:?}", r.stderr);
+}
+
+/// Runs src like the development mode's runs (dev_guard, preview) with the
+/// mock answers.
+fn run_dev(src: &str, answers: &str, preview: &str) -> Res {
+    let (o, e) = (SharedBuf::default(), SharedBuf::default());
+    let m = Mock::from_json(answers, Some(e.sink())).unwrap();
+    let r = run(Options {
+        script_path: write_script("dev.js", src),
+        ui: Some(Arc::new(m)),
+        stdout: Some(out(&o)),
+        stderr: Some(out(&e)),
+        dev_guard: true,
+        preview: preview.to_string(),
+        ..Default::default()
+    });
+    let (code, err) = match r {
+        Ok(c) => (c, None),
+        Err(e) => (1, Some(e)),
+    };
+    Res { code, err, stdout: o.text(), stderr: e.text() }
+}
+
+#[test]
+fn dev_guard_asks_before_deleting_much() {
+    let _l = lock_lang("ja");
+    let d = crate::testutil::tempdir();
+    for f in ["a.txt", "b.txt", "c.txt", "sub/x.txt"] {
+        let p = d.join(f);
+        std::fs::create_dir_all(p.parent().unwrap()).unwrap();
+        std::fs::write(&p, "x").unwrap();
+    }
+    std::fs::create_dir_all(d.join("empty")).unwrap();
+    let dir = d.to_string_lossy().replace('\\', "/");
+    // One file and an empty folder: no question. The second file: asked
+    // once. A folder with files: asked.
+    let src = format!(
+        r#"const d = "{dir}";
+        fs.remove(d + "/a.txt");
+        fs.remove(d + "/empty", {{ recursive: true }});
+        fs.remove(d + "/b.txt");
+        fs.remove(d + "/c.txt");
+        fs.remove(d + "/sub", {{ recursive: true }});
+        console.log("done");"#
+    );
+    let r = run_dev(&src, r#"{"confirm": [true, false]}"#, "");
+    assert_eq!(r.stderr.matches("confirm(").count(), 2, "{:?}", r.stderr);
+    assert!(r.stderr.contains("複数のファイルを削除") && r.stderr.contains("中のファイル・フォルダ 1 個ごと"), "{:?}", r.stderr);
+    assert!(r.err_text().contains("削除を取りやめました"), "{}", r.err_text());
+    assert!(!d.join("c.txt").exists() && d.join("sub/x.txt").exists() && !r.stdout.contains("done"));
+}
+
+#[test]
+fn dev_form_preview() {
+    let _l = lock_lang("ja");
+    let f = crate::testutil::tempdir().join("form.json");
+    let src = r#"
+        console.log("before");
+        await ui.form({ title: "集計", fields: [{ name: "file", label: "ファイル", type: "file", required: true }], onSubmit() { console.log("ran") } });
+        console.log("after");"#;
+    let r = run_dev(src, "{}", &f.to_string_lossy());
+    assert_eq!(r.code, 0, "{} {:?}", r.err_text(), r.stderr);
+    assert!(r.stdout.contains("before") && !r.stdout.contains("ran") && !r.stdout.contains("after"), "{:?}", r.stdout);
+    let v: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(&f).unwrap()).unwrap();
+    assert_eq!(v["type"], "init");
+    assert_eq!(v["fields"][0]["label"], "ファイル");
+    assert_eq!(v["fields"][0]["required"], true);
+}
+
+#[test]
 fn watchdog_ignores_waiting_scripts() {
     let _l = lock_lang("ja");
     // Busy for less than the limit at a time, waiting in between: the
@@ -686,4 +762,23 @@ fn stop_key_ignored_while_waiting() {
     let r = run_with_key(src, "[]", down);
     assert!(r.code == 0 && r.stdout.contains("done"), "exit {} {} {:?}", r.code, r.err_text(), r.stderr);
     assert!(!r.stderr.contains("confirm("), "asked: {:?}", r.stderr);
+}
+
+/// With the sources (xljs --debug), the entry stops on its first line of
+/// code when globalThis.__xljsBreakFirst is set; without, nothing is added.
+#[test]
+fn debug_bundle_breaks_on_first_line() {
+    let src = "import { x } from \"./dep\";\ntype T = number;\ninterface I { a: T }\nexport function f() { return 1; }\n\nconst y: T = x + f();\nconsole.log(y);\n";
+    let p = write_script("brk.ts", src);
+    std::fs::write(std::path::Path::new(&p).parent().unwrap().join("dep.ts"), "export const x = 1;\nconsole.log(x);\n").unwrap();
+    let code = String::from_utf8(bundle_with(&p, true).unwrap()).unwrap();
+    let pat = "if (__vite_ssr_import_meta__.__xljsBreak) debugger;";
+    assert_eq!(code.matches(pat).count(), 1, "{code}");
+    let line = code[..code.find(pat).unwrap()].matches('\n').count() as u32 + 1;
+    let m = crate::engine::sourcemap::Mapper::from_bundle(&code).unwrap();
+    let (file, l, _) = m.lookup(line, 1 + code.lines().nth(line as usize - 1).unwrap().find("if").unwrap() as u32).unwrap();
+    assert!(file.ends_with("brk.ts"), "{file}");
+    assert_eq!(l, 6);
+    let plain = String::from_utf8(bundle(&p).unwrap()).unwrap();
+    assert!(!plain.contains("debugger"));
 }

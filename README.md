@@ -26,6 +26,7 @@ if (dest) {
 - **言語**: ES2023 相当（オプショナルチェーン、`??`、async/await、トップレベル await、クラスフィールドなど）と TypeScript。`import` でファイル分割可能
 - **ファイル操作**: ブラウザの File System Access API 風（`showOpenFilePicker` / `FileSystemFileHandle` など）＋ フォルダ走査などの独自拡張
 - **Excel**: xlsx の読み書き（[umya-spreadsheet](https://github.com/MathNya/umya-spreadsheet)）。値は数値・文字列・真偽値・`Date` で受け渡し
+- **PDF**: Excel で印刷したときと同じページでの PDF 出力（WebView2）、PDF の結合・ページの削除・挿入・回転・文字の追加（Excel・Acrobat 不要）
 - **CSV / JSON**: Shift_JIS(CP932) / UTF-8 の自動判定、BOM 付き UTF-8 での書き出し、JSON Lines
 - **エクスプローラー連携**: 出力したファイルを選択した状態でエクスプローラーを開く、既定のアプリで開く
 - **UI**: Windows ネイティブのダイアログ（メッセージボックス、ファイル選択、進捗ダイアログ）。コンソールでも動作
@@ -40,6 +41,7 @@ xljs pack <script> [-o 出力.exe]   スクリプトを埋め込んだ exe を�
 xljs check <script>                構文と import を検査（実行しない）
 xljs init [フォルダ]               型定義 (xljs.d.ts) と jsconfig.json を作成
 xljs vba <book.xlsm>... [-o 出力.txt]  マクロブックの VBA コードを 1 つのテキストにまとめる
+xljs dev [script|フォルダ]         開発モード（AI チャットと並べて作る・直す）
 xljs version
 ```
 
@@ -50,6 +52,7 @@ xljs version
 | `--ui=mock --ui-answers=answers.json` | ダイアログを出さず、ファイルに書いた応答を返す（自動実行・テスト用） |
 | `--lang=auto` / `ja` / `en` | メッセージの言語（既定はシステムの表示言語） |
 | `--debug` | デバッグウィンドウでスクリプトを実行する（ブレークポイント・ステップ実行。下記「デバッグ」） |
+| `--dev` | スクリプトを開発モードで開く（`xljs dev` と同じ。下記「開発モード」） |
 | `--debug=window` | スクリプトは通常どおり実行し、画面（HTML ウィンドウ）の開発者ツール（F12）と右クリックメニューだけを有効にする |
 | `--watchdog=<秒>` / `on` / `off` | スクリプトが応答しないまま（ダイアログ・画面・タイマーを待たずに JavaScript を実行し続けて）指定の秒数を過ぎたら、中止するか尋ねる（無限ループ対策）。既定はネイティブ UI では 15 秒、コンソール・モック UI では off（Ctrl+C で止められるため）。`0` も off |
 | `--stop-key=<キー>` / `on` / `off` | 実行中にキーが押されたら中止するか尋ねる。キーは `esc`・`pause`・`f1`〜`f24`・英数字などと `ctrl+`・`shift+`・`alt+` の組み合わせ（例: `ctrl+shift+q`）。既定はネイティブ UI では `esc`、コンソール・モック UI では off。Windows のみ |
@@ -57,7 +60,7 @@ xljs version
 - `xljs.exe` は GUI 版（ダブルクリックしても黒い窓が出ない）、`xljsc.exe` はコンソール版です。中身は同じで、GUI 版をコマンドプロンプトから起動した場合はそのコンソールに出力します（ただしコマンドプロンプトは終了を待たないので、コマンドラインで使うときや出力をリダイレクトするときはコンソール版の `xljsc` が向いています）。GUI 版で出力先がないときのエラーはダイアログで表示し、文字列を選択したり「コピー」ボタンでクリップボードにコピーしたりできます。
 - エラー・警告はシステムの表示言語に合わせて日本語または英語で表示します。`--lang=ja|en`（または環境変数 `XLJS_LANG`）で切り替えられます。JavaScript エンジンや構文チェック、Excel 読み込み、OS のエラーのうちよく出るものは日本語に訳して表示します（`catch` で受け取る `e.message` は元のままです）。
 - メッセージは言語ごとのファイル `src/i18n/locales/<言語>.json` にまとまっています（`en.json` が基準）。言語を追加するときはファイルを 1 つ足してビルドするだけです（手順は同じフォルダの README.md）。
-- 引数なしで起動すると、「スクリプトを実行」「スクリプトをデバッグ」「exe を作成」「VBA コードを取り出す」から選ぶ画面が開き、選んだあとで対象のファイルを選びます。exe にスクリプトをドラッグ＆ドロップしても実行できます（マクロ付きブックをドロップすると VBA コードの取り出し）。
+- 引数なしで起動すると、「スクリプトを実行」「スクリプトをデバッグ」「開発モード」「exe を作成」「VBA コードを取り出す」から選ぶ画面が開き、選んだあとで対象のファイルを選びます。exe にスクリプトをドラッグ＆ドロップしても実行できます（マクロ付きブックをドロップすると VBA コードの取り出し）。
 - コンソール版をダブルクリックで起動した場合は、終了時に Enter 待ちになります。
 - 進捗表示中の Ctrl+C はキャンセル要求（`cancelled` が true になる）、2 回目で強制終了です。
 - 無限ループなどでスクリプトが応答しなくなったときは、`--watchdog` の秒数を過ぎると「中止しますか？」と尋ねます（尋ねている間スクリプトは止まっています）。「OK」で中止（終了コード 130。`catch` では受け取れません）、「キャンセル」で続行し、同じ時間が過ぎたらまた尋ねます。
@@ -112,6 +115,26 @@ xljsc pack 集計.js -o 集計.exe （コンソール版をベースにする場
 - `@icon` を書くと、メインウィンドウ・`app.open` のウィンドウ・`ui.form` / `ui.table` のウィンドウのタイトルバーとタスクバーのアイコンがそのファイルになります（.ico は複数サイズ入りを推奨）。exe ファイル自体のアイコン（エクスプローラーでの表示）は変わりません。
 - `titleBar: "custom"`（`app.open` / `ui.form` / `ui.table` のオプション。メインウィンドウはメタデータの `@titlebar custom`）にすると、PWA のように OS のタイトルバーを使わず、ページの上端に自前のタイトルバー（アイコン・タイトル・最小化／最大化／閉じるボタン）を表示します。ドラッグで移動、ダブルクリックで最大化でき、ライト・ダークの配色に従います。`icon` に Font Awesome のアイコン（`"table"` や `"fa-regular fa-calendar"`）を指定するとタイトルの前に表示します（`titleBar` が `"system"` のときは `icon` は無視）。`width` / `height` はタイトルバー（32px）を除いた大きさです。コンソール・モックでは無視されます。
 
+### 開発モード（AI チャットと並べて作る）
+
+```
+xljs dev 集計.js
+```
+
+開始画面の「開発モード」でも開きます。左に AI チャット（Microsoft Copilot・Microsoft 365 Copilot・Gemini・ChatGPT・Claude のボタンか URL で開く。サインインはそのまま残ります）、右にキャンバス（タブ: コード・差分・プレビュー・履歴・実行結果）が並ぶウィンドウです。API キーなどの設定は要りません。
+
+- **新規作成ウィザード**: 「新しく作る（ウィザード）」「Excel マクロを移植する」から、質問に答えて AI チャットに最初に送る依頼文を作ります。聞くのは、新しく作るか Excel マクロの移植か、プログラムの形（スクリプト・アプリ・おまかせ）、入力フォームを使うか（使う・使わない＝自動実行・おまかせ）、スクリプトの名前（決める・おまかせ・未定）、作るフォルダ、やりたいこと（移植ならマクロからの変更点）。移植では、選んだブックからマクロ（VBA）とシートの構成（大きさ・先頭の数行・数式。同じ形の数式はまとめる）を取り出して依頼文に入れ、入力・出力ファイルの有無と説明も聞きます。長くなるときは取り出した内容をテキストファイルに保存して添付できます。［スクリプトを作成して依頼文をコピー］で仮のスクリプトを作って開き、依頼文をコピーするので、チャットに貼り付けて送信します。名前を「おまかせ」「未定」にしたときは、AI の回答のファイルを承認するときにその名前に変えられます。
+- **AI に xljs を説明**: AI 向けの指示（`docs/ai/prompt.md`）と今のスクリプトをクリップボードにコピーします。チャットの最初に貼り付けて送信し、続けてやりたいことを書きます。
+- **回答の取り込み**: チャットでダウンロードしたファイル（回答のコードのダウンロードボタン、または「ファイルで出して」と頼んだもの）は保存場所を聞かずに受け取り、「差分」タブで今のファイルと比べて表示します。［承認して置き換える］で置き換わります。置き換える先は、ふつうは編集中のスクリプトです。名前で選べるときは名前で選びます（AI が付けがちな後ろの文字は無視: `集計_修正版.js`・`集計 (1).js` → `集計.js`。アプリの `ui/index.html` なども `index_fixed.html` から分かります）。分からないときは選べます。
+- **履歴**: 置き換える前（AI の回答の適用・前の版に戻すとき・その回で初めて保存するとき）の内容を、スクリプトのフォルダの `.xljs/versions/<ファイル名>/0001.js`, `0002.js` … に残します。「履歴」タブで比べたり、［この版に戻す］で戻したりできます（戻す前の内容もまた残ります）。
+- **コード**: エディタ（CodeMirror。JavaScript・TypeScript・JSON・HTML・CSS の色分け、括弧の対応・自動で閉じる、折りたたみ、Ctrl+F で検索・置換、［整形］（Shift+Alt+F）で Prettier による整形。入力から 1.5 秒で自動保存、Ctrl+S でも保存）。xljs の API は入力補完が出ます（`ui.`・`wb.sheets[0].` のようなメンバー、`ui.form({ ` の中のオプション名、`for (const sheet of wb.sheets)` の変数など。Ctrl+Space でも出せます）。名前にマウスを置くと説明が出ます。ほかのエディタで変更したファイルは、ウィンドウに戻ったときに読み込み直します。
+- **実行**: ［実行］（F5）・［デバッグ実行］（Shift+F5）はスクリプトを別のプロセスで実行し、出力を「実行結果」に表示します。開発モードからの実行では、無限ループの確認（`--watchdog`・`--stop-key`）が常に有効になり、`fs.remove` がフォルダを中身ごと消すときと、1 回の実行で 2 つ目のファイルを消すときに確認します。
+- **エラー・無限ループ**: 止まった場所（ファイルと行）を表示し、クリックでその行に移動します。［AI への依頼をコピー］で、エラーの内容・前後のコード・「修正した完全なファイルを同じ名前で」という依頼をまとめてコピーするので、チャットに貼り付けて送信します（「スクリプト全体も含める」も選べます）。無限ループで中止したときも、実行していた場所が分かります。
+- **プレビュー**: アプリ（`@mode app`）は `@html` の画面の見た目を表示します（スクリプトは動きません）。それ以外は、スクリプトを最初の `ui.form` まで実行してフォームを表示します（`onSubmit` は実行しません。フォームより前のコードは実行されます）。
+- **チャットの紐付け**: スクリプトごとに使ったチャットの URL を `.xljs/dev.json` に覚え、次にそのスクリプトを開くと同じ会話を開きます。
+- **画面の配置**: 右上のボタンで「両方」「AI チャットだけ」「キャンバスだけ」と左右の入れ替え。境目はドラッグで動かせます。
+- API での連携や Git との連携はしません（AI とのやりとりはチャット画面とファイルのダウンロード・クリップボードだけ）。仕組みは `docs/dev-mode.md`。
+
 ### デバッグ
 
 ```
@@ -148,7 +171,7 @@ xljs init
 
 `types` は `[{ description: "Excel", accept: { "<MIME>": [".xlsx"] } }]` のほか、`accept: [".xlsx", ".xlsm"]` とも書けます。`showSaveFilePicker` で `types` を省略すると `suggestedName` の拡張子が種類になり、拡張子を消して入力しても付け足します（`集計` → `集計.xlsx`）。`startIn` には `"desktop"` `"documents"` `"downloads"`、パス、ハンドルを指定できます。
 
-他のアプリで作業している間に `alert`・`confirm`・`prompt`・`ui.error`・ピッカー・フォームなどが開くと（Windows はダイアログを前面に出させないので、タスクバーが点滅するだけになる）、同じ内容の通知を画面右下に自動で出します。通知をクリックするとダイアログが前面に出ます。`ui.autoNotify = false` で止められます。通知が表示中のままスクリプトが終わると、通知が閉じるまで（最大 10 秒）プロセスの終了を待ちます。
+他のアプリで作業している間に `alert`・`confirm`・`prompt`・`ui.error`・ピッカー・フォームなどが開くと（Windows はダイアログを前面に出させないので、タスクバーが点滅するだけになる）、同じ内容の通知を画面右下に自動で出します。通知をクリックするとダイアログが前面に出ます。`ui.autoNotify = false` で止められます。alert・ピッカーなどの自動の通知は、そのダイアログを閉じると消えます。`ui.notify` の通知が表示中のままスクリプトが終わると、通知が閉じるまで（最大 10 秒）プロセスの終了を待ちます（自動の通知だけなら待ちません）。
 
 ### 進捗表示
 
@@ -198,6 +221,7 @@ if (!v) exit();              // v.src は FileSystemDirectoryHandle、v.out は 
 - ウィンドウのアイコンはメタデータの `@icon` で変えられます（`@mode app` でなくても有効。表も同じ）。
 - 同梱の [Font Awesome Free](https://fontawesome.com/icons) のアイコンを、項目のラベル（`icon`）、タブ（`tabs: [{ label, icon, fields }]`）、ボタン（`buttons: [{ label, icon, ... }]`、送信ボタンは `submitIcon`）に付けられます。`"folder-open"` のように名前だけなら solid、`"fa-regular fa-calendar"` のようにクラスでも書けます。フォームの `icon` は `titleBar: "custom"` のときに自前のタイトルバーでタイトルの前に表示します（`"system"` では無視）。コンソール・モックでは無視されます。
 - `accent` でフォームのアクセントカラー（送信ボタン・タブ・フォーカス枠・チェックボックス・表の選択行・タイトルバーのアイコン）を変えられます。`accent: "#c42b1c"` のような CSS の色はライト・ダークの両方に、`accent: { light: "#0f7b0f", dark: "#6ccb5f" }` なら配色ごとに使います。ボタンの文字色（黒か白）やホバー色は指定した色から決めます。コンソール・モックでは無視されます。
+- `background` でフォームの背景色（ページとタイトルバーの地の色）を変えられます。`background: "#fff8e1"` のような CSS の色はライト・ダークの両方に、`background: { light: "#eef6ff", dark: "#1a2533" }` なら配色ごとに使います。暗い背景色を指定すると文字・入力欄・枠線もダークの配色になります（ダークの配色で明るい背景色なら逆）。コンソール・モックでは無視されます。
 - 検証: `required`、`pattern`（＋`patternMessage`）、`min` / `max`、ファイル・フォルダの存在、項目ごとの `validate(value, values)`（メッセージを返す）。これらは入力欄を離れたときに検証して項目の下に表示し、エラーの表示中は入力のたびに検証し直します（直すとすぐ消えます）。フォームの `validate(values)`（`{ 項目名: "メッセージ" }` か全体へのメッセージを返す）は送信時だけ呼ばれるので、項目をまたぐ検証に使います。
 - `onSubmit(values, ctx)` を書くと、実行後もウィンドウが開いたままになり、進捗（`ctx.progress(done, total, message)` / `ctx.withProgress(iterable)`。中止ボタンで `ctx.withProgress` のループから onSubmit が終わる）、ログ（`ctx.log` / `ctx.error`）、中止ボタン（`ctx.cancelled`）を表示します。出力ファイルを返すと完了後に「フォルダを開く」ボタンが出ます。サンプル: `examples/form-aggregate.js`
 - `buttons: [{ label, onClick(values, ctx) }]` で送信ボタンの左にボタンを追加できます。押すと `onClick` が `onSubmit` と同じように実行されます（進捗・ログ・中止。ウィンドウは開いたまま）。`validate: false` を付けると検証せずに入力のままの値で実行し（読み込み・クリアなど）、`close: true` を付けると正常に終わったらフォームを閉じます。`submit: false` で送信ボタンを出さないこともできます。`ctx.setValue(name, value)` で項目の値を変えられます。コンソールでは項目のあとにどのボタンを押すか尋ねます。
@@ -325,7 +349,8 @@ for (const f of d.walk({ glob: "*.xlsx", exclude: ["old"] })) {
 - `walk()` `list()` `fs.list()` `fs.glob()` `entries()` / `values()` は、既定で隠しファイル・システムファイル（`desktop.ini`、`Thumbs.db` など）、`.` で始まる名前、Office のロックファイル（`~$集計.xlsx`）を除きます（隠しフォルダは中も見ません）。含めるときは `{ hidden: true }` を渡します（`fs.list(p, { hidden: true })`、`d.list({ hidden: true })`）。
 - ハンドルの独自拡張: `path`, `relativePath`, `exists()`, `readText()`, `writeText()`, `readBytes()` など
 - `fs`: `exists` `stat` `readText` `writeText` `appendText` `readBytes` `writeBytes` `readJSON` `writeJSON` `list` `walk` `glob` `mkdir` `remove` `rename` `copy` `cwd` `chdir`
-- `path`: `join` `resolve` `dirname` `basename` `extname` `relative` `normalize` `isAbsolute`
+- `path`: `join` `resolve` `dirname` `basename` `extname` `relative` `normalize` `isAbsolute` `expandEnv`
+- パスを受け取る API（`fs.*`・`path.*`・`workbooks.open`・`save()`・ピッカーの `startIn`・フォームの `file`/`folder` 項目など）は、文字列中の `%USERPROFILE%` のような環境変数を展開します（`fs.readText("%USERPROFILE%\\Desktop\\a.txt")`）。未定義の変数はそのまま残ります。展開した文字列だけ欲しいときは `path.expandEnv(s)`
 - パスを受け取る API には文字列・ハンドル・`File`（ディスク上のもの）のどれでも渡せます。
 - 相対パスはカレントフォルダが基準です。エクスプローラーから起動した場合（ダブルクリック、exe やスクリプトへのドロップ）はスクリプト（埋め込み exe なら exe）のあるフォルダがカレントフォルダになります。コマンドプロンプトから起動した場合はそのままです。
 - `writeText` / `appendText` の既定は UTF-8 で、`.csv` / `.tsv` のファイルだけは BOM 付き（Excel で文字化けしない）にします。
@@ -389,6 +414,36 @@ shell.openExternal("https://example.com/");   // ブラウザで開く
 
 パス・ハンドル・`File` のどれでも渡せます。mock UI では実際には開かず、ログに出すだけです。
 
+### Active Directory（`ad`）
+
+ドメインに参加している Windows で、サインイン中のユーザーの権限でディレクトリを検索します（RSAT の ActiveDirectory モジュールは不要）。PowerShell の `Get-ADUser` / `Get-ADComputer` / `Get-ADGroup` / `Search-ADAccount` に当たるものを `ad.search` 1 つで行います。
+
+```js
+if (!ad.available()) { alert("このパソコンはドメインに参加していません"); exit(); }
+ad.me();                                          // 自分（displayName, mail, department, memberOf ...）
+ad.computer();                                    // このコンピューター
+ad.domain();                                      // { name: "corp.example.com", netbiosName: "CORP", server, ... }
+ad.get("yamada");                                 // 1 件（ログオン名・識別名・UPN・メール・SID・名前。なければ null）
+
+ad.search("山田*");                               // 名前・ログオン名・表示名・メールで検索（既定はユーザー）
+ad.search({ filter: { department: "営業部", title: ["課長", "部長"] } });   // Get-ADUser -Filter
+ad.search({ filter: "(employeeID=00*)" });        // LDAP のフィルタも可
+ad.search({ filter: { department: ad.me().department }, disabled: false }); // 自分の部署の有効なユーザー
+ad.search({ disabled: true });                    // Search-ADAccount -AccountDisabled
+ad.search({ lockedOut: true });                   // Search-ADAccount -LockedOut
+ad.search({ expired: true }) / ad.search({ expiringDays: 30 }) / ad.search({ passwordExpired: true })
+ad.search({ type: "computer", inactiveDays: 90 }); // 90 日ログオンのないコンピューター（Get-ADComputer）
+ad.search({ memberOf: "営業部", recursive: true }); // グループのメンバー（入れ子のグループも）
+ad.search({ type: "group", searchBase: "OU=本社,DC=corp,DC=example,DC=com" });
+ad.search({ properties: ["extensionAttribute1"] }); // 既定にない属性も読む（"*" ですべて）
+
+sheet.write(ad.search({ disabled: true }).map((u) => ({ 名前: u.displayName, ログオン名: u.sAMAccountName, 最終ログオン: u.lastLogonTimestamp })));
+```
+
+- 結果のキーは LDAP の属性名です（`sAMAccountName`、`displayName`、`whenCreated` など）。日時は `Date`（無期限・なしは `null`）、SID・GUID は文字列、`memberOf` などは配列です。`enabled` `lockedOut` `passwordExpired` `passwordNeverExpires`（アカウント）、`groupScope` `groupCategory`（グループ）も付きます。
+- 条件はすべて AND です。オプションの綴りを間違えるとエラーになります。
+- 読み取りだけです（変更はできません）。ほかのドメインは `server` で指定します（`{ server: "dc01.example.com" }`）。
+
 ### Excel
 
 ```js
@@ -447,6 +502,28 @@ sheet.cell("A1").getStyle();   // 現在の書式を取得
 - 範囲の端に引いた罫線は、隣の（書式が設定済みの）セルの接する辺にも反映するので、線が食い違いません。
 - サンプル: `examples/xlsx-style-report.js`
 
+### PDF の編集（`pdf`）
+
+```js
+const doc = pdf.open("報告書.pdf");                   // パス・ハンドル・File・Blob・ArrayBuffer（パスワード付きは { password }）
+doc.append("別紙.pdf", { pages: "1-3" });              // 結合（ページを選んで）
+doc.insert(2, "差し込み.pdf");                         // 2 ページ目の前に挿入
+doc.insertBlankPage(1, { paper: "A4" });               // 白紙のページ
+doc.removePages("5-6,-1");                             // 削除（負の番号は後ろから）
+doc.rotatePages(3, 90);                                // 時計回りに回転
+doc.addText("all", (p) => `${p.number} / ${p.count}`, { position: "bottom-center", size: 9 }); // ページ番号
+doc.addText("all", "資料番号 A-001", { position: "top-right", size: 9 });                   // 資料番号
+doc.addText(1, "社外秘", { position: "center", size: 48, color: "red", opacity: 0.3, rotate: 30 });
+doc.save("報告書_提出用.pdf");
+pdf.merge(["a.pdf", "b.pdf"], "まとめ.pdf");           // まとめて結合して保存
+```
+
+- Excel・Acrobat・WebView2 がなくても動きます（コンソール・モックでも可）。ページ番号は 1 始まり、位置は mm（表示したときのページの左上から。回転したページでも見た目の向き）、文字の大きさは pt です。
+- `addText` の置き場所は `position` で指定します: `"top-left"` `"top-center"` `"top-right"` `"center"` `"bottom-left"` `"bottom-center"` `"bottom-right"`（`"右上"` `"下中央"` `"右下"` なども可）。ページの端から `margin`（mm、既定 10。`{ x: 15, y: 8 }` で横・縦を別々に）だけ内側に置きます。細かく決めるときは `x` `y` `right` `bottom`（mm）で指定します。
+- `addText` の文字は、フォントのうち使った字だけを PDF に埋め込みます（検索・コピーできます）。フォントは `font` に名前（`"游ゴシック"` `"メイリオ"` `"ＭＳ 明朝"` など）かファイルのパスで指定し、既定は表示言語の Excel のフォント（日本語は游ゴシック）です。配列にすると文字ごとに前から順に探します。
+- ページを取り込むとき、しおり（アウトライン）・フォームの定義・ページラベルは引き継ぎません。保存した PDF は暗号化されず、電子署名は無効になります。
+- サンプル: `examples/pdf-merge-stamp.js`。仕組みは `docs/pdf-edit.md`
+
 ### 日付（Day.js）
 
 [Day.js](https://day.js.org/) を組み込んでいます（グローバルの `dayjs`。`import` は不要）。エラー・警告と同じ言語（システムの表示言語、`--lang` で変更可）のロケールと主なプラグイン（customParseFormat, isBetween, isSameOrAfter / isSameOrBefore, minMax, quarterOfYear, weekOfYear, isoWeek, dayOfYear, duration, relativeTime, advancedFormat, isLeapYear, isToday など）を読み込み済みです。
@@ -468,6 +545,7 @@ sheet.cell("A1").value = dayjs();              // dayjs の値はセル・CSV・
 
 - `console.log/error/table/time` など、`setTimeout` / `setInterval`、`sleep(ms)`
 - `fs.readJSON` などのほか、`csv.read` / `workbooks.open` もパス・ハンドル・`File`・`Blob` を受け付けます
+- `xljs.computerName`（コンピューター名） `xljs.userName`（ログオン中のユーザー名）。ドメインに参加していなくても使えます（AD の詳しい情報は `ad.me()`）
 - `xljs.args` `xljs.script` `xljs.scriptDir` `xljs.version` `xljs.title`（ダイアログのタイトル。`@title` で変更可） `xljs.env(name)` `exit(code)`
 - 補っている組み込み: `Array.fromAsync`, `structuredClone`, `TextEncoder` / `TextDecoder`（Shift_JIS 対応）, `atob` / `btoa`, `Blob` / `File`, 数値・日付の `toLocaleString`（日本語形式）, 簡易 `Intl`
 

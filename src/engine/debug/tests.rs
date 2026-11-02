@@ -127,6 +127,9 @@ impl Page {
             meta: Default::default(),
             assets: None,
             debug: false,
+            dev_guard: false,
+            preview: String::new(),
+            removed: Default::default(),
         };
         let host = Rc::new(Host::new(env, None));
         *self.shared.lock().unwrap() = Some(host.lp.shared.clone());

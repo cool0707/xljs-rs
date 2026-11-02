@@ -224,7 +224,7 @@ impl Locale {
 /// The language tag of the system: the Windows display language ("ja-JP"),
 /// elsewhere the POSIX locale variables.
 #[cfg(windows)]
-fn system_language() -> String {
+pub(crate) fn system_language() -> String {
     use windows::Win32::Globalization::{GetUserDefaultUILanguage, LCIDToLocaleName};
     unsafe {
         let lid = GetUserDefaultUILanguage();
@@ -238,7 +238,7 @@ fn system_language() -> String {
 }
 
 #[cfg(not(windows))]
-fn system_language() -> String {
+pub(crate) fn system_language() -> String {
     for k in ["LC_ALL", "LC_MESSAGES", "LANG", "LANGUAGE"] {
         if let Ok(v) = std::env::var(k)
             && !v.is_empty()

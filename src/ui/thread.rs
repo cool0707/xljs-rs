@@ -267,4 +267,8 @@ impl Window for ThreadedWindow {
         let w = self.w.clone();
         call(&self.t, move || w.close())
     }
+    fn browser(&self, cmd: BrowserCommand) {
+        let w = self.w.clone();
+        self.t.post(Box::new(move || w.browser(cmd)));
+    }
 }
