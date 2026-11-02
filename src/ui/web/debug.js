@@ -300,16 +300,15 @@
       },
       /** A rejection noted with rejected() got a handler after all. */
       handled(promise) { unhandled.delete(promise); },
-      /** Runs the script; with breakFirst the debugger stops before it. */
+      /** Runs the script; with breakFirst the debugger stops on its first
+       * line of code (the bundle checks the flag there, see insert_break in
+       * src/engine/bundle.rs). */
       run(breakFirst) {
         if (started) return;
         started = true;
         status("running");
         if (native.appMode) native.openMain();
-        if (breakFirst) {
-          // Step into (F11) the next call to get to the script's first line.
-          debugger; // eslint-disable-line no-debugger
-        }
+        G.__xljsBreakFirst = !!breakFirst;
         const done = G.__xljsMain(native.setExports);
         done.then(
           () => { settled = true; check(); },

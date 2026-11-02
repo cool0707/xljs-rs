@@ -134,6 +134,9 @@
         $("break-first-label").textContent = L.breakFirst;
         $("run").textContent = L.run;
         $("run").disabled = false;
+        // On by default and remembered (never with ?autorun).
+        $("break-first").checked = !autorun && remembered() !== "0";
+        $("break-first").onchange = () => remember($("break-first").checked ? "1" : "0");
         $("run").onclick = () => worker.postMessage({ type: "run", breakFirst: $("break-first").checked });
         $("run").focus();
         setStatus(L.ready);
@@ -141,6 +144,13 @@
         break;
     }
   };
+
+  function remembered() {
+    try { return localStorage.getItem("xljs.debug.breakFirst"); } catch { return null; }
+  }
+  function remember(v) {
+    try { localStorage.setItem("xljs.debug.breakFirst", v); } catch { /* not kept */ }
+  }
 
   document.addEventListener("keydown", (e) => {
     if (e.key === "F5" || (e.ctrlKey && (e.key === "r" || e.key === "R"))) {

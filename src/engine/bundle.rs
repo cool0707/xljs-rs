@@ -212,6 +212,9 @@ impl Bundler {
             }
             scoping = r.scoping;
         }
+        if entry && self.with_sources {
+            insert_break(&alloc, &mut program);
+        }
         let mut deps: Vec<String> = Vec::new();
         if cjs {
             deps = require_calls(src);
@@ -340,6 +343,37 @@ impl Bundler {
     }
 }
 
+/// The flag of import.meta that insert_break checks (set by the module
+/// loader from globalThis.__xljsBreakFirst, see web/debug.js).
+const BREAK_FLAG: &str = "__xljsBreak";
+
+/// Puts `if (import.meta.__xljsBreak) debugger;` before the first statement
+/// of program that runs (not an import, an export list or a function
+/// declaration), with that statement's span: the debugger then stops on the
+/// script's first line of code (the break-first option of xljs --debug).
+fn insert_break<'a>(alloc: &'a Allocator, program: &mut oxc::ast::ast::Program<'a>) {
+    use oxc::ast::ast::{Declaration, ExportDefaultDeclarationKind, Expression, IdentifierName, Statement};
+    use oxc::ast::builder::AstBuilder;
+    let runs = |st: &Statement| match st {
+        Statement::ImportDeclaration(_)
+        | Statement::ExportAllDeclaration(_)
+        | Statement::ExportNamedDeclaration(_)
+        | Statement::ExportFromDeclaration(_)
+        | Statement::FunctionDeclaration(_)
+        | Statement::EmptyStatement(_) => false,
+        Statement::ExportDeclaration(d) => !matches!(d.declaration, Declaration::FunctionDeclaration(_)) && !d.declaration.is_type(),
+        Statement::ExportDefaultDeclaration(d) => !matches!(d.declaration, ExportDefaultDeclarationKind::FunctionDeclaration(_)) && !d.declaration.is_typescript_syntax(),
+        _ => !st.is_typescript_syntax(),
+    };
+    let Some(i) = program.body.iter().position(runs) else { return };
+    let span = oxc::span::GetSpan::span(&program.body[i]);
+    let b = AstBuilder::new(alloc);
+    let flag = IdentifierName::new(span, BREAK_FLAG, &b);
+    let test = Expression::new_static_member_expression(span, Expression::new_import_meta(span, &b), flag, false, &b);
+    let stmt = Statement::new_if_statement(span, test, Statement::new_debugger_statement(span, &b), None, &b);
+    program.body.insert(i, stmt);
+}
+
 /// The module loader of the bundle (inside the bundle's function).
 const RUNTIME: &str = r#"const __xljs_cache = Object.create(null);
 const __xljs_toESM = (e) => {
@@ -398,7 +432,9 @@ function __xljs_load(id, onExports) {
       if (k !== "default" && !(k in exports)) Object.defineProperty(exports, k, { enumerable: true, configurable: true, get() { return src[k]; } });
     }
   };
-  return fn(imp, dyn, exports, all, { url: "file:///" + id }).then(() => exports);
+  const meta = { url: "file:///" + id };
+  Object.defineProperty(meta, "__xljsBreak", { get: () => globalThis.__xljsBreakFirst === true });
+  return fn(imp, dyn, exports, all, meta).then(() => exports);
 }
 "#;
 
